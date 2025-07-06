@@ -1,17 +1,24 @@
 <script lang="ts">
     // let { text, toggle }: { text:string, toggle:boolean } = $props();
-    let { text, toggle, onchangeHandler, binder=false}: { text:string, toggle:boolean, onchangeHandler:() => void, binder?:boolean } = $props();
+    let { text, color, toggle, onchangeHandler, binder=false}: { text:string, color:string, toggle:boolean, onchangeHandler:() => void, binder?:boolean } = $props();
+    // const boxWidth = `${text.length* 0.675}rem`; 
+    // console.log(text+" button "+boxWidth)
     function handleChange() {
         onchangeHandler();
     }
+    // const styleString = "--bottom-color: var(--color-"+color+"-dark-static); --right-color: var(--color-"+color+"-light-static); --highlight-color: var(--color-"+color+"); --highlight-color-dark: var(--color-"+color+"-dark);";
+    const styleString = `--bottom-color: var(--color-${color}-dark-static);
+                        --right-color: var(--color-${color}-light-static); 
+                        --highlight-color: var(--color-${color}); 
+                        --highlight-color-dark: var(--color-${color}-dark);`;
 </script>
-<!-- style="--box-width: {text.length*0.675}rem" -->
+
 {#if toggle}
-    <label class="isometric-button bg-background-lightest text-primary cascadia-code" style="--box-width: {text.length+1}vmin" >{text}
+    <label class="isometric-button bg-background-light text-primary cascadia-code" style={styleString} >{text}
         <input type="checkbox" checked={binder} onchange="{handleChange}"/>
     </label>
 {:else}
-    <button class="isometric-button bg-background-lightest text-primary cascadia-code" onchange="{handleChange}" style="--box-width: {text.length+1}vmin">{text}</button>
+    <button class="isometric-button bg-background-light text-primary cascadia-code" onchange="{handleChange}" style={styleString}>{text}</button>
 {/if}
 
 <style lang="scss">
@@ -20,8 +27,9 @@
         flex-shrink: 0; //stop flexbox in parent from altering height or width
         --diagonal-length: var(--button-border-width);
         --translate-distance: calc(var(--button-border-width) / 3);
-        font-size: var(--size-font);
-        --box-height: calc(var(--size-font)*1.4); // 1.35rem
+        font-size: calc(var(--size-font) * 2);
+        --box-height: calc(var(--size-font) * 2 + 1vmin);
+        --box-width: calc(var(--size-font) * 2 + 1vmin);
         text-align: center;
         // vertical-align: middle;
         position: relative;
@@ -31,11 +39,11 @@
     }
 
     .isometric-button:hover {
-        background-color: var(--color-accent);
+        background-color: var(--highlight-color);
     }
 
     .isometric-button:active{
-        background-color: var(--color-accent-dark);
+        background-color: var(--highlight-color-dark);
         transform: translate(var(--translate-distance), var(--translate-distance)); 
     }
 
@@ -53,7 +61,7 @@
         transform-origin: left top;
         left: 100%;
         top: 0%; /* override standard ::before positioning behavior */
-        background-color: var(--color-accent-light-static);
+        background-color: var(--right-color);
     }
 
     .isometric-button:active::before{
@@ -73,7 +81,7 @@
         transform-origin: left top;
         top: 100%;
         left: 0%; /* override standard ::after positioning behavior */
-        background-color: var(--color-accent-dark-static);
+        background-color: var(--bottom-color);
     }
 
     .isometric-button:active::after{
@@ -102,7 +110,7 @@
 
     
     .isometric-button:has(input:checked):hover {
-        background-color: var(--color-accent-dark);
+        background-color: var(--highlight-color);
     }
 
     .isometric-button:has(input:checked)::before {

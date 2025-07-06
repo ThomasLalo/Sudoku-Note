@@ -13,6 +13,19 @@ body{
 html {
     font-size: 16px; /* 1rem = 16px */
 }
+// for 16pt font on a 1080 screen
+// 1rem = 16px  
+// 1vmin = 10.8px
+// 1rem in vmin = 16 / 10.8 ≈ 1.48 vmin
+:root {
+    --grid-size: 81vmin; //prev 81vmin
+    --margin-width: 1vmin; //prev 1vmin, double --diagonal-length in IsometricBorder.svelte 
+    --panel-border-width: 2vmin;
+    --button-border-width: 1vmin;
+    --margin-plus-panel: calc(var(--margin-width) + var(--panel-border-width));
+    --margin-plus-button: calc(var(--margin-width) + var(--button-border-width));
+    --size-font: 1.6vmin;
+}
 
 .pacifico-regular {
     font-family: "Pacifico", cursive;
@@ -37,6 +50,7 @@ html {
 // https://www.realtimecolors.com/dashboard?colors=e2ecfd-020817-7aa7f5-930b2b-ee7e17&fonts=Inter-Inter
 
 // Color definitions for light and dark themes
+// these are SASS lists
 $light-colors: (
     text: hsl(218, 87%, 6%),
     background: hsl(223, 84%, 95%),
@@ -56,6 +70,7 @@ $dark-colors: (
 // LOOP 1: Generate CSS custom properties (the actual color values)
 // This creates the CSS variables that store color values and their variants
 // Default to light theme colors in :root, using root is convention, and allows for the variable to be global
+// @each is from SASS
 :root {
     @each $name, $color in $light-colors {
         --color-#{$name}: #{$color};                                        // Base color: --color-primary

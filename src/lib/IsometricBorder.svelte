@@ -12,13 +12,13 @@
 
 
 
-<style>
+<style lang="scss">
 
     .isometric-container {
         position: relative;
         height: 100%;
         width: 100%;
-        --diagonal-length: 0.75rem;
+        --diagonal-length: var(--panel-border-width);
     }
 
     .face {

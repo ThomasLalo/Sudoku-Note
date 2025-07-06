@@ -2,6 +2,7 @@
     import "../app.scss"
     import { onMount } from "svelte";
     import { browser } from '$app/environment';
+	import TextButton from "$lib/TextButton.svelte";
     let { children } = $props(); //this is needed because slot was deprecated. no idea why props are involved, but I'd guess its all the html that gets combined and passed through the layout
 
     // function toggleTheme(): void {
@@ -12,7 +13,6 @@
     //     }
     // }
 
-    // I need to use local storage and onMount to make the theme check persistent and maybe browser for something
 
     // should I really use $state and $effect? they don't add anything here
     let theme = $state("light");
@@ -51,8 +51,9 @@
     <header>
         <h1 class="text-primary cascadia-code">Sudoku Note</h1>
         <div class="button-container">
-            <label for="themeSwitch" class="text-primary cascadia-code">Dark Mode</label>
-            <input type="checkbox" bind:checked={toggled} id="themeSwitch" onchange={toggleTheme}>
+            <TextButton text="Dark Mode" toggle={true} onchangeHandler={toggleTheme} binder={toggled}/>
+            <!-- <label for="themeSwitch" class="text-primary cascadia-code">Dark Mode</label>
+            <input type="checkbox" bind:checked={toggled} id="themeSwitch" onchange={toggleTheme}> -->
         </div>
     </header>
     <!-- replaces <slot/> -->
@@ -60,17 +61,21 @@
 </main>
 
 
-<style>
-
-    main{
-        margin: 1vmin;
-    }
+<style lang="scss">
     header{
         display: flex;
         justify-content: space-between;
         align-items: center;
+        margin-bottom: var(--button-border-width);
+        margin-top: var(--margin-width); //--diagonal-length in IsometricBorder.svelte 
+        margin-left: var(--margin-width);
     }
+
     h1 {
-        text-shadow: .2vmin .2vmin var(--color-secondary-light);
+        text-shadow: 0.15rem 0.15rem var(--color-secondary-light);
+    }
+    
+    .button-container {
+        margin-right: var(--margin-plus-panel); // --diagonal-length in TextButton.svelte
     }
 </style>
