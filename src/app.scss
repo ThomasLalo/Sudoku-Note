@@ -1,0 +1,156 @@
+@use 'sass:color';
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body{
+    background-color: var(--color-background);
+}
+
+html {
+    font-size: 16px; /* 1rem = 16px */
+}
+
+.pacifico-regular {
+    font-family: "Pacifico", cursive;
+    font-weight: 400;
+    font-style: normal;
+}
+
+.vt323-regular {
+    font-family: "VT323", monospace;
+    font-weight: 400;
+    font-style: normal;
+}
+
+
+.cascadia-code {
+    font-family: "Cascadia Code", sans-serif;
+    font-optical-sizing: auto;
+    font-weight: 400;
+    font-style: normal;
+}
+
+// https://www.realtimecolors.com/dashboard?colors=e2ecfd-020817-7aa7f5-930b2b-ee7e17&fonts=Inter-Inter
+
+// Color definitions for light and dark themes
+$light-colors: (
+    text: hsl(218, 87%, 6%),
+    background: hsl(223, 84%, 95%),
+    primary: hsl(218, 86%, 28%),
+    secondary: hsl(346, 86%, 69%),
+    accent: hsl(29, 86%, 49%)
+);
+
+$dark-colors: (
+    text: hsl(218, 87%, 94%),
+    background: hsl(223, 84%, 5%),
+    primary: hsl(218, 86%, 72%),
+    secondary: hsl(346, 86%, 31%),
+    accent: hsl(29, 86%, 51%)
+);
+
+// LOOP 1: Generate CSS custom properties (the actual color values)
+// This creates the CSS variables that store color values and their variants
+// Default to light theme colors in :root, using root is convention, and allows for the variable to be global
+:root {
+    @each $name, $color in $light-colors {
+        --color-#{$name}: #{$color};                                        // Base color: --color-primary
+        --color-#{$name}-lightest: #{color.mix(white, $color, 95%)};    // Lightest variant: --color-primary-lighter
+        --color-#{$name}-light: #{color.scale($color, $lightness: 20%)};    // Light variant: --color-primary-light
+        --color-#{$name}-dark: #{color.scale($color, $lightness: -20%)};    // Dark variant: --color-primary-dark
+        --color-#{$name}-muted: #{color.scale($color, $saturation: -30%)};  // Muted variant: --color-primary-muted
+        --color-#{$name}-grayed: #{color.mix(gray, $color, 50%)};
+        --color-#{$name}-light-static: #{color.scale($color, $lightness: 20%)};    // --color-primary-light-static for isometric things that need the shades to look like lighting
+        --color-#{$name}-dark-static: #{color.scale($color, $lightness: -20%)};    // 
+    }
+}
+
+//this won't work the way I want it to probably, light, lightest probably need to be flipped with dark,darkest.
+//I could just adjust the color.scale without messing with the variable or class names and that would probably be the most painless
+// Override with dark theme colors when data-theme="dark" is set 
+[data-theme="dark"] {
+    @each $name, $color in $dark-colors {
+        --color-#{$name}: #{$color};
+        --color-#{$name}-lightest: #{color.mix(white, $color, 10%)};    // Lighter variant: --color-primary-lighter                                        // Override base color with dark version
+        --color-#{$name}-light: #{color.scale($color, $lightness: -20%)};    // Override light variant with dark version
+        --color-#{$name}-dark: #{color.scale($color, $lightness: 20%)};    // Override dark variant with dark version
+        --color-#{$name}-muted: #{color.scale($color, $saturation: -30%)};  // Override muted variant with dark version
+        --color-#{$name}-grayed: #{color.mix(gray, $color, 50%)};
+        --color-#{$name}-light-static: #{color.scale($color, $lightness: 20%)};    // Light variant: --color-primary-light
+        --color-#{$name}-dark-static: #{color.scale($color, $lightness: -20%)};    // Dark variant: --color-primary-dark
+    }
+}
+
+// LOOP 2: Generate utility classes that use the CSS custom properties
+// This creates classes like .bg-primary, .text-secondary-light, .border-accent-dark, etc.
+// The classes reference the CSS variables created in Loop 1 using var()
+$property-types: (
+    bg: background-color,      // .bg-* classes
+    text: color,              // .text-* classes  
+    border: border-color      // .border-* classes - this doesn't work?
+);
+
+$color-variants: ('', '-lightest', '-light', '-dark', '-muted', '-grayed', '-light-static','-dark-static');  // All color variants to generate
+
+@each $name, $color in $light-colors {                    // Loop through each color name
+    @each $class-prefix, $css-property in $property-types { // Loop through each CSS property type
+        @each $variant in $color-variants {                   // Loop through each color variant
+            .#{$class-prefix}-#{$name}#{$variant} {             // Generate class name: .bg-primary-light
+                #{$css-property}: var(--color-#{$name}#{$variant}); // Use CSS variable: var(--color-primary-light)
+            }
+        }
+    }
+}
+
+/*
+CSS Custom Properties (CSS Variables) Quick Reference:
+- Declaration: --variable-name: value;
+- Usage: property: var(--variable-name);
+- Scope: Defined in :root for global access, or any selector for local scope
+- Inheritance: Child elements inherit parent's custom properties
+- Fallback: var(--variable-name, fallback-value)
+- JavaScript: Can be read/modified at runtime unlike Sass variables
+Example:
+    :root { --main-color: blue; }
+    .element { color: var(--main-color); }
+*/
+
+//styles for isometric borders
+    // .isometric-container {
+    //     position: relative;
+    //     height: 100%;
+    //     width: 100%;
+    //     --diagonal-length: 0.45rem;
+    // }
+
+    // .face {
+    //     position: absolute;
+    //     height: 100%;
+    //     width: 100%;
+    //     top: 0;
+    //     left: 0;
+    // }
+
+    // .right-parallelogram {
+    //     position: absolute;
+    //     width: var(--diagonal-length);
+    //     height: 100%;
+    //     transform: skew(0,45deg);
+    //     transform-origin: left top;
+    //     left: 100%;
+    //     top: 0%;
+    // }
+
+    // .bottom-parallelogram {
+    //     position: absolute;
+    //     width: 100%;
+    //     height: var(--diagonal-length);
+    //     transform: skew(45deg);
+    //     transform-origin: left top;
+    //     top: 100%;
+    //     left: 0%;
+    // }
