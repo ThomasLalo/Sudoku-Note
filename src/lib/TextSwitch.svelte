@@ -1,7 +1,7 @@
 <script lang="ts">
-
-    let { label, color="accent", onchangeHandler, }:
-        { label:string, color?:string, onchangeHandler:() => void,  } = $props();
+    // let { text, toggle }: { text:string, toggle:boolean } = $props();
+    let { label, color="accent", onchangeHandler, binder=false}:
+        { label:string, color?:string, onchangeHandler:() => void, binder?:boolean } = $props();
     
     function handleChange() {
         onchangeHandler();
@@ -15,5 +15,6 @@
                         --box-height: calc(var(--size-font)*1.4);` ;
 
 </script>
-
-<button class="isometric-button bg-background-lightest text-primary cascadia-code" onchange="{handleChange}" style="styleString">{label}</button>
+<label class="isometric-button bg-background-lightest text-primary cascadia-code" style="{styleString}" >{label}
+    <input type="checkbox" checked={binder} onchange="{handleChange}"/>
+</label>

@@ -3,6 +3,7 @@
 	import KeypadButton from "./KeypadButton.svelte";
     import SudokuGrid from "./SudokuGrid.svelte";
     import TextButton from "./TextButton.svelte";
+    import TextSwitch from "./TextSwitch.svelte";
     // import type {Snippet} from 'svelte';
 
     let panelText = $state("");
@@ -21,7 +22,7 @@
 <div class="app-container">
     <div class="side-container left-side-container">
         <div class="button-container">
-            <TextButton text="Hide Info" toggle={true} onchangeHandler={setPanelText}/>
+            <TextSwitch label="Hide Info" onchangeHandler={setPanelText}/>
         </div>
         <div class="panel-container left-panel-container">
             <IsometricBorder color = "secondary">
@@ -32,7 +33,7 @@
 
 
     <div class="grid-container">
-        <IsometricBorder color="secondary">
+        <IsometricBorder color="primary">
             <SudokuGrid/>
         </IsometricBorder>
     </div>
@@ -44,7 +45,7 @@
             <IsometricBorder color = "secondary">
                 <div class="panel right-panel">
                     {#each keypadNumbers as num}
-                        <KeypadButton text={num} color="text" toggle={false} onchangeHandler={setPanelText}/>
+                        <KeypadButton text={num} color="primary" toggle={false} onchangeHandler={setPanelText}/>
                     {/each}
                 </div>
             </IsometricBorder>
@@ -105,13 +106,15 @@
     }
 
     .panel{
-        padding: calc(var(--margin-width) / 2);
+        padding: 1vmin;
     }
 
     .right-panel {
-        width: 40%;
-        height: 40%;
+        width: 100%;
+        height: 100%;
         display: grid;
-        grid-template: 1fr 1fr 1fr / 1fr 1fr 1fr;
+        grid-template-columns: repeat(3, max-content);
+        grid-template-rows: repeat(3, max-content);
+        gap: 2vmin;
     }
 </style>

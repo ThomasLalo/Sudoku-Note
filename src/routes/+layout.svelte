@@ -2,7 +2,7 @@
     import "../app.scss"
     import { onMount } from "svelte";
     import { browser } from '$app/environment';
-	import TextButton from "$lib/TextButton.svelte";
+	import TextSwitch from "$lib/TextSwitch.svelte";
     let { children } = $props(); //this is needed because slot was deprecated. no idea why props are involved, but I'd guess its all the html that gets combined and passed through the layout
 
     // function toggleTheme(): void {
@@ -51,7 +51,7 @@
     <header>
         <h1 class="text-primary cascadia-code">Sudoku Note</h1>
         <div class="button-container">
-            <TextButton text="Dark Mode" toggle={true} onchangeHandler={toggleTheme} binder={toggled}/>
+            <TextSwitch label="Dark Mode" onchangeHandler={toggleTheme} binder={toggled}/>
             <!-- <label for="themeSwitch" class="text-primary cascadia-code">Dark Mode</label>
             <input type="checkbox" bind:checked={toggled} id="themeSwitch" onchange={toggleTheme}> -->
         </div>
