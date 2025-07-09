@@ -1,6 +1,6 @@
 @use 'sass:color';
 
-* {
+*, *::before, *::after, input, *:has(input:checked){
     margin: 0;
     padding: 0;
     box-sizing: border-box;
@@ -12,6 +12,9 @@ body{
 
 html {
     font-size: 16px; /* 1rem = 16px */
+    -moz-text-size-adjust: none;
+    -webkit-text-size-adjust: none;
+    text-size-adjust: none;
 }
 // for 16pt font on a 1080 screen
 // 1rem = 16px  
@@ -224,18 +227,22 @@ Example:
         left: 100%;
         top: 0%; /* override standard ::before positioning behavior */
 
-        transform: skew(0,45deg) translate(-0.5px) ; // without the 0 it just skews the x axis, adding in the 0 lets me skew the y-axis
+        // transform: skew(0,45deg) translate(-0.5px);
+        transform: skew(0,45deg) translate(0, -0.5px); // without the 0 it just skews the x axis, adding in the 0 lets me skew the y-axis
         transform-origin: left top;
+        box-shadow: inset 0 -1px var(--right-color); // fixes gap between rectangles caused by anti-aliasing
 
         content: ""; // ::before and ::after won't show up without this
         pointer-events: none; // the border shouldn't be clickable
+
     }
 
     .isometric-button:has(input:checked)::before,
     .isometric-button:active::before {
         width: calc( var(--diagonal-length) - var(--translate-distance));
         transform-origin: left top;
-        transform:  skew(0,45deg) translate(-0.5px);
+        transform:  skew(0,45deg);
+        // transform:  skew(0,45deg) translate(-0.5px);
         // translate fixes rounding error positioning
     }
 
@@ -250,8 +257,11 @@ Example:
         top: 100%;
         left: 0%; /* override standard ::after positioning behavior */
 
-        transform: skew(45deg) translate(0.5px,-0.5px);
+        transform: skew(45deg);
+        // transform: skew(45deg) translate(0.5px,-0.5px);
         transform-origin: left top;
+        box-shadow: inset -1px 1px var(--bottom-color);
+
 
         content: "";
         pointer-events: none;
@@ -262,5 +272,7 @@ Example:
         height: calc( var(--diagonal-length) - var(--translate-distance));
         width: calc( var(--box-width) + 0px);
         transform-origin: left top;
-        transform: skew(45deg) translate(0,-0.5px); 
+        transform: skew(45deg);
+        // transform: skew(45deg) translate(0,-0.5px);
+        
     }

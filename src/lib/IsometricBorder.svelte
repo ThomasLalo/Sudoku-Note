@@ -6,8 +6,8 @@
 <!-- style="background-image: linear-gradient(to left, var(--color-background-lightest), var(--color-{color}-lighter));" -->
 <div class="isometric-container">
     <div class="face text-primary bg-background-lightest cascadia-code"> {@render children()} </div>
-    <div class="right-parallelogram bg-{color}-light-static"></div>
-    <div class="bottom-parallelogram bg-{color}-dark-static"></div>
+    <div class="right-parallelogram bg-{color}-light-static" style="--right-color: var(--color-{color}-light-static)"></div>
+    <div class="bottom-parallelogram bg-{color}-dark-static" style="--bottom-color: var(--color-{color}-dark-static)"></div>
 </div>
 
 
@@ -33,17 +33,19 @@
         position: absolute;
         width: var(--diagonal-length);
         height: 100%;
-        transform: skew(0,45deg) ;
+        transform: skew(0,45deg);
         transform-origin: left top;
         left: 100%;
+        box-shadow: inset 0 -1px var(--right-color); // fixes gap between rectangles caused by anti-aliasing
     }
 
     .bottom-parallelogram {
         position: absolute;
         width: 100%;
         height: var(--diagonal-length);
-        transform: skew(45deg) translate(1px,-1px);
+        transform: skew(45deg);
         transform-origin: left top;
         top: 100%;
+        box-shadow: inset -1px 0 var(--bottom-color);
     }
 </style>
