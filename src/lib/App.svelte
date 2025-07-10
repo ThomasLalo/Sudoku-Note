@@ -45,7 +45,7 @@
             <IsometricBorder color = "secondary">
                 <div class="panel right-panel">
                     {#each keypadNumbers as num}
-                        <KeypadButton text={num} color="primary" toggle={false} onchangeHandler={setPanelText}/>
+                        <KeypadButton label={num} color="primary" toggle={false} onchangeHandler={setPanelText}/>
                     {/each}
                 </div>
             </IsometricBorder>

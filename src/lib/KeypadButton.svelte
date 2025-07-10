@@ -1,6 +1,6 @@
 <script lang="ts">
 
-    let { text, color, onchangeHandler, toggle=false, binder=false}: { text:string, color:string, onchangeHandler:() => void, toggle?:boolean, binder?:boolean } = $props();
+    let { label, color, onchangeHandler, toggle=false, binder=false}: { label:string, color:string, onchangeHandler:() => void, toggle?:boolean, binder?:boolean } = $props();
 
     function handleChange() {
         onchangeHandler();
@@ -19,10 +19,27 @@
 </script>
 
 {#if toggle}
-    <label class="isometric-button bg-background-light text-primary-dark cascadia-code" style={styleString} >{text}
-        <input type="checkbox" checked={binder} onchange="{handleChange}"/>
+    <label class="button-isometric-container style={styleString}">
+        <div class="button-face text-text bg-background cascadia-code"> 
+            {label} 
+            <input type="checkbox" checked={binder} onchange="{handleChange}"/>
+            <div class="button-right-parallelogram"></div>
+            <div class="button-bottom-parallelogram"></div>
+        </div>
     </label>
+
 {:else}
-    <button class="isometric-button bg-background-light text-primary-dark cascadia-code" onchange="{handleChange}" style={styleString}>{text}</button>
+    <button class="button-isometric-container" onchange="{handleChange}" style={styleString}>
+        <div class="button-face text-text bg-background cascadia-code"> 
+            {label} 
+            <!-- corner square must come first to be underneath -->
+            <div class="button-corner-square"></div> 
+            <div class="button-right-parallelogram"></div>
+            <div class="button-bottom-parallelogram"></div>
+        </div>
+    </button>
+
 {/if}
+
+
 

@@ -1,25 +1,30 @@
 <script lang="ts">
 	import App from "$lib/App.svelte";
-	import Wireframe from "$lib/Wireframe.svelte";
-	import Parallelogram from "$lib/Parallelogram.svelte";
 
-	import TextButton from "$lib/TextButton.svelte";
+    // let panelText = $state("");
+
+    // function setPanelText() {
+    //     if (panelText === "") {
+    //         panelText = ":)";
+    //     } else {
+    //         panelText = "";
+    //     }
+    // }
+
 </script>
 
-
-
-<!-- <Parallelogram/> -->
-<!-- <Wireframe/> -->
 <App/>
 
 
 <!-- <div class="display-container">
-	<TextButton text="click me"/>
-</div> -->
-<!-- <style>
+	<NewButton label="Show Hide" onchangeHandler={setPanelText}/>
+</div>
+<style>
 	.display-container {
+		margin: 100px;
         display: flex;
-        height: 40.5rem; 
+        height: 100px;
+		width: 100px; 
         align-items: center;
         justify-content: center;
     }

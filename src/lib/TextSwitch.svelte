@@ -7,14 +7,23 @@
         onchangeHandler();
     }
 
-    const styleString = `--bottom-color: var(--color-${color}-dark-static);
-                        --right-color: var(--color-${color}-light-static); 
-                        --highlight-color: var(--color-${color}); 
-                        --highlight-color-dark: var(--color-${color}-dark);
-                        --box-width: ${label.length+1}vmin; 
-                        --box-height: calc(var(--size-font)*1.4);` ;
+    const styleString = `
+        --bottom-color: var(--color-${color}-dark-static);
+        --right-color: var(--color-${color}-light-static); 
+        --highlight-color: var(--color-${color}); 
+        --highlight-color-dark: var(--color-${color}-dark);
+        --box-width: ${label.length+1}vmin; 
+        --box-height: calc(var(--size-font)*1.4);
+    `;
 
 </script>
-<label class="isometric-button bg-background-lightest text-primary cascadia-code" style="{styleString}" >{label}
-    <input type="checkbox" checked={binder} onchange="{handleChange}"/>
+
+<label class="button-isometric-container" style={styleString}>
+    <div class="button-face text-text bg-background-lightest cascadia-code" >
+        {label}
+        <input type="checkbox" checked={binder} onchange="{handleChange}"/>
+        <div class="button-corner-square"></div> 
+        <div class="button-right-parallelogram"></div>
+        <div class="button-bottom-parallelogram"></div>
+    </div>
 </label>
