@@ -52,17 +52,6 @@
         </div>
     </div>
 
-    <!-- <div class="side-container">
-        <div class="panel-container right-panel-container">
-            {#snippet rightPanel()}
-                <div class="panel">left panel</div>
-            {/snippet}
-            <IsometricBorder markup={rightPanel} color={"secondary"}/>
-        </div>
-    </div> -->
-
-    <!-- <div class="panel right-panel bg-background-lightest text-primary cascadia-code">right panel</div> -->
-
 </div>
 
 <style lang="scss">

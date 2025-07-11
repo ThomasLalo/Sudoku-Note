@@ -12,7 +12,7 @@
         --right-color: var(--color-${color}-light-static); 
         --highlight-color: var(--color-${color}); 
         --highlight-color-dark: var(--color-${color}-dark);
-        --box-width: ${label.length+1}vmin; 
+        --box-width: ${label.length * 0.6 + 1.2}rem; 
         --box-height: calc(var(--size-font)*1.4);
     `;
 

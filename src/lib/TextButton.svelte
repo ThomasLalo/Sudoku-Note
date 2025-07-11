@@ -16,13 +16,13 @@
         --right-color: var(--color-${color}-light-static); 
         --highlight-color: var(--color-${color}); 
         --highlight-color-dark: var(--color-${color}-dark);
-        --box-width: ${label.length+1}vmin; 
+        --box-width: ${label.length * 0.6 + 1.2}rem;  
         --box-height: calc(var(--size-font)*1.4);
-    `;
+    `; // 0.6 rem is the width of a character in a monospace font
 
 </script>
 
-<button class="button-isometric-container" onchange="{handleChange}" style={styleString}>
+<button class="button-isometric-container" onclick="{handleChange}" style={styleString}>
     <div class="button-face text-text bg-background-lightest cascadia-code">
         {label}
         <div class="button-corner-square"></div> 

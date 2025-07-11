@@ -11,15 +11,12 @@ body{
 }
 
 html {
-    font-size: 16px; /* 1rem = 16px */
+    // font-size: 16px; /* 1rem = 16px */
     -moz-text-size-adjust: none;
     -webkit-text-size-adjust: none;
     text-size-adjust: none;
 }
-// for 16pt font on a 1080 screen
-// 1rem = 16px  
-// 1vmin = 10.8px
-// 1rem in vmin = 16 / 10.8 ≈ 1.48 vmin
+
 :root {
     --grid-size: 81vmin; //prev 81vmin
     --margin-width: 1vmin; //prev 1vmin, double --diagonal-length in IsometricBorder.svelte 
@@ -184,6 +181,11 @@ Example:
         display: inline-block; // labels being inline by default adds weird width and height stuff, this had to be changed for the label to be a box
 
         background-color: transparent; // I don't understand why I need this. something is setting this to --color-background
+
+        // margin-top: var(--button-border-width); // bad idea in practice. the top/bottom left/right just get combined
+        // margin-left: var(--button-border-width);
+        // margin-bottom: calc(var(--button-border-width) * 2);
+        // margin-right: calc(var(--button-border-width) * 2);
     }
 
     .button-face {
@@ -202,28 +204,31 @@ Example:
         cursor: pointer;
         user-select: none;
 
-
-
     }
 
     .button-face:hover {
         background-color: var(--highlight-color);
     }
-    .button-face input[type="checkbox"] {
+    .button-face input[type="checkbox"],
+    .button-face input[type="radio"] {
         display: none; // this just hides the actual checkbox
     }
+
 
     .button-face:has(input:checked){
         background-color: var(--highlight-color);
         transform: translate(var(--translate-distance), var(--translate-distance)); 
+        box-shadow: inset -1px -1px var(--highlight-color);
     }
     .button-face:active {
         background-color: var(--highlight-color-dark);
-        transform: translate(var(--translate-distance), var(--translate-distance)); 
+        transform: translate(var(--translate-distance), var(--translate-distance));
+        box-shadow: inset -1px -1px var(--highlight-color-dark);
     }
 
     .button-face:has(input:checked):hover {
         background-color: var(--highlight-color-dark);
+        box-shadow: inset -1px -1px var(--highlight-color-dark);
     }
 
 
@@ -242,10 +247,9 @@ Example:
         // transform: skew(0,45deg) translate(0, -0.5px); // without the 0 it just skews the x axis, adding in the 0 lets me skew the y-axis
         transform: skew(0,45deg);
         transform-origin: left top;
-        // box-shadow: inset 0 -1px var(--right-color); // fixes gap between rectangles caused by anti-aliasing
+        box-shadow: inset 1px 0px var(--right-color); // fixes gap between rectangles caused by anti-aliasing
 
         pointer-events: none; // the border shouldn't be clickable
-
     }
 
     .button-face:has(input:checked) .button-right-parallelogram,
@@ -268,7 +272,7 @@ Example:
         transform: skew(45deg);
 
         transform-origin: left top;
-        box-shadow: inset 0 1px var(--bottom-color); // looks like there is a subpixel line between the face and bottom that this does not fix
+        box-shadow: inset 0px 1px var(--bottom-color); // looks like there is a subpixel line between the face and bottom that this does not fix
 
         pointer-events: none;
     }
@@ -285,8 +289,8 @@ Example:
     .button-corner-square {
         position: absolute;
         top:100%;
-        left: 100%; //calc( - 0.5px)
-        height: calc( var(--diagonal-length) - 1px);
+        left: 100%;
+        height: calc( var(--diagonal-length) - 1px); // the edges are visible without the -1s
         width: calc( var(--diagonal-length) - 1px);
         background-color: var(--right-color);
     }
