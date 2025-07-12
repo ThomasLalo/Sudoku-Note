@@ -18,22 +18,28 @@ html {
 }
 
 :root {
-    --grid-size: 81vmin; //prev 81vmin
-    --margin-width: 1vmin; //prev 1vmin, double --diagonal-length in IsometricBorder.svelte 
-    --panel-border-width: 2vmin;
-    --button-border-width: 1vmin;
+
+
+    // CHANGE THIS
+    --grid-size: 81vh; //prev 81vmin
+
+
+
+    --margin-width: 0.5rem; //prev 1vmin, double --diagonal-length in IsometricBorder.svelte 
+    --panel-border-width: 1rem;
+    --button-border-width: 0.5rem;
     --margin-plus-panel: calc(var(--margin-width) + var(--panel-border-width));
     --margin-plus-button: calc(var(--margin-width) + var(--button-border-width));
-    --size-font: 1.6vmin;
+    --size-font: 1rem;
 }
 
-.pacifico-regular {
+.pacifico-regular { // unused unused, but in google fonts import for now
     font-family: "Pacifico", cursive;
     font-weight: 400;
     font-style: normal;
 }
 
-.vt323-regular {
+.vt323-regular { // unused, but in google fonts import for now
     font-family: "VT323", monospace;
     font-weight: 400;
     font-style: normal;
@@ -203,6 +209,7 @@ Example:
 
         cursor: pointer;
         user-select: none;
+        flex-shrink: 0;
 
     }
 

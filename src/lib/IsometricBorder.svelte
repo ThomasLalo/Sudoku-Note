@@ -48,4 +48,8 @@
         top: 100%;
         box-shadow: inset -1px 0 var(--bottom-color);
     }
+        @media(max-width: 450px) {
+            .isometric-container {
+                --panel-border-width: 0.5rem;
+            }}
 </style>

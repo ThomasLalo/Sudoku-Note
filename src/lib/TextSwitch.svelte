@@ -15,7 +15,7 @@
         --box-width: ${label.length * 0.6 + 1.2}rem; 
         --box-height: calc(var(--size-font)*1.4);
     `;
-
+// --box-width: ${label.length * 0.6 + 1.2}rem; 
 </script>
 
 <label class="button-isometric-container" style={styleString}>

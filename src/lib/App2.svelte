@@ -10,7 +10,8 @@
     let panelText = $state("");
     let displayedPanel = $state("Keypad");
 
-    const smallerThanDesktop = new MediaQuery('max-aspect-ratio: 4.5/3');
+    const smallerThanDesktop = new MediaQuery('max-width: 1615px');
+    // const smallerThanDesktop = false;
 
     function setPanelText() {
         if (panelText === "") {
@@ -108,8 +109,8 @@
 
     .keypad {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 1.5vmin;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
         // max-width: fit-content;
     }
     .layout-button-container{
@@ -117,7 +118,7 @@
         grid-area: button;
     }
 
-@media (max-aspect-ratio: 4.5/3) {
+@media (max-width: 1615px) { //tablet landscape
     .app-container {
         grid-template-columns: auto 1fr;
         grid-template-rows: auto 1fr;
@@ -127,9 +128,6 @@
         ;
 
     }
-    .sudoku-grid-container {
-        grid-row: span 2;
-    }
     .layout-button-container{
         display: flex;
         margin-bottom: calc(var(--horizontal-margin) * 2);
@@ -143,34 +141,116 @@
     }
 }
 
-@media (max-aspect-ratio: 1/1) { // incomplete
-    .app-container {
-        // grid-template-columns: auto auto;
-        // grid-template-rows: 1fr 1fr 1fr;
-        grid-template-areas:
+@media(max-width: 1080px) {
+        .sudoku-grid-container {
+        height: 72vh;
+        width: 72vh;
+    }
+}
+
+@media(max-width: 1000px) {
+        .sudoku-grid-container {
+        height: 63vh;
+        width: 63vh;
+    }
+}
+
+@media(max-width: 1000px) and (max-height:859px) {
+        .sudoku-grid-container {
+        font-size: 0.7rem;
+    }
+}
+
+@media(max-width: 900px) {
+    .app-container{
+        grid-template-rows: auto auto 1fr;
+        grid-template-areas: 
         "sudoku"
         "button"
         "keypad"
-        "info"
-        ;
-
+        "info";
     }
+
     .sudoku-grid-container {
-        height: 60vw;
-        width: 60vw;
-        grid-row: 1;
+        height: 54vh;
+        width: 54vh;
+        font-size: 0.7rem;
+        // grid-row: span 1;
     }
     .layout-button-container{
-        display: flex;
-        margin-bottom: calc(var(--horizontal-margin) * 2);
-        margin-left: var(--horizontal-margin);
-        gap: 2vmin;
-
-        // justify-self: end;
-    }
-
-    .left-panel{
-        margin-right: var(--horizontal-margin);
+        margin-top: 1rem;
     }
 }
+
+@media(max-width: 540px) {
+    .app-container{
+        grid-template-rows: auto auto 1fr;
+        grid-template-areas: 
+        "sudoku"
+        "button"
+        "keypad"
+        "info";
+    }
+
+    .sudoku-grid-container {
+        height: 95vw;
+        width: 95vw;
+        font-size: 0.7rem;
+        // grid-row: span 1;
+    }
+    .layout-button-container{
+        margin-top: 1rem;
+    }
+}
+
+@media(max-height:680px) {
+    .app-container {
+        grid-template-columns: auto 1fr;
+        grid-template-rows: auto 1fr;
+        grid-template-areas:
+        "sudoku button button"
+        "sudoku keypad info"
+        ;
+    }
+
+    .sudoku-grid-container {
+        height: 95vh;
+        width: 95vh;
+        font-size: 0.7rem;
+        // grid-row: span 1;
+    }
+    .layout-button-container{
+        margin-top: 1rem;
+    }
+}
+
+// @media (max-width: 1214px) { // phone portrait
+
+// }
+
+// @media (max-height: 753px) and (max-width: 1209px) { //phone landscape
+//     .app-container {
+//         grid-template-columns: auto 1fr;
+//         grid-template-rows: auto 1fr;
+//         grid-template-areas:
+//         "sudoku button button"
+//         "sudoku keypad info"
+//         ;
+
+//     }
+//     .sudoku-grid-container {
+//         grid-row: span 2;
+//     }
+//     .layout-button-container{
+//         display: flex;
+//         margin-bottom: calc(var(--horizontal-margin) * 2);
+//         margin-left: var(--horizontal-margin);
+//         gap: 2vmin;
+//         // justify-self: end;
+//     }
+
+//     .left-panel{
+//         margin-right: var(--horizontal-margin);
+//     }
+// }
 </style>

@@ -29,11 +29,3 @@
         </div>
     </label>
 {/each}
-
-
-<style lang="scss">
-    .radio-container {
-        display: flex; //I might need to make this inline to override display styling from button-isometric-container
-        gap: calc(var(--button-border-width) * 2);
-    }
-</style>

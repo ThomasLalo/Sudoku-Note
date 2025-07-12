@@ -78,4 +78,13 @@
     .button-container {
         margin-right: var(--margin-plus-panel); // --diagonal-length in TextButton.svelte
     }
+    @media(max-height:680px) {
+        h1 {
+            display: none;
+        }
+        header{ 
+            position: fixed;
+            right: var(--margin-width);
+        }
+    }
 </style>

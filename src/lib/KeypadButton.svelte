@@ -12,11 +12,9 @@
         --right-color: var(--color-${color}-light-static); 
         --highlight-color: var(--color-accent); 
         --highlight-color-dark: var(--color-accent-dark);
-        --size-font: 64px; 
         --box-height: calc(var(--size-font) + 1vmin);
         --box-width: calc(var(--size-font) + 1vmin);
     `;
-
 
 </script>
 
@@ -43,5 +41,30 @@
 
 {/if}
 
+<style lang="scss">
+    .button-isometric-container {
+        --size-font: 4rem; 
+    }
+    // @media (max-aspect-ratio: 1/1) {
+    //     .button-isometric-container{
+    //         --size-font: 2rem;
+    //     }
+    // }
+        @media (max-width: 1214px) { // phone portrait
+        .button-isometric-container{
+            --size-font: 2rem;
+        }
+    }
+    @media(max-width: 900px) {
+        .button-isometric-container{
+            --size-font: 4rem;
+        }
+    }
+    @media(max-height:680px) {
+        .button-isometric-container{
+            --size-font: 2rem;
+        }
+    }
 
+</style>
 
