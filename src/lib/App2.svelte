@@ -109,7 +109,7 @@
 
     .keypad {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(3, 1fr);
         gap: 1rem;
         // max-width: fit-content;
     }
@@ -142,21 +142,21 @@
 }
 
 @media(max-width: 1080px) {
-        .sudoku-grid-container {
+    .sudoku-grid-container {
         height: 72vh;
         width: 72vh;
     }
 }
 
 @media(max-width: 1000px) {
-        .sudoku-grid-container {
+    .sudoku-grid-container {
         height: 63vh;
         width: 63vh;
     }
 }
 
 @media(max-width: 1000px) and (max-height:859px) {
-        .sudoku-grid-container {
+    .sudoku-grid-container {
         font-size: 0.7rem;
     }
 }
@@ -202,8 +202,15 @@
         margin-top: 1rem;
     }
 }
-
-@media(max-height:680px) {
+@media(max-width: 400px) and (max-height:700px) {
+    .sudoku-grid-container {
+        font-size: 0.5rem;
+    }
+    // .app-container {
+    //     background-color: red !important;
+    // }
+}
+@media(max-height:390px) {
     .app-container {
         grid-template-columns: auto 1fr;
         grid-template-rows: auto 1fr;
@@ -216,7 +223,7 @@
     .sudoku-grid-container {
         height: 95vh;
         width: 95vh;
-        font-size: 0.7rem;
+        font-size: 0.5rem;
         // grid-row: span 1;
     }
     .layout-button-container{
