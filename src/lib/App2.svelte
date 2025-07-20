@@ -5,13 +5,63 @@
     import SudokuGrid from "./SudokuGrid.svelte";
     import TextSwitch from "./TextSwitch.svelte";
     import { MediaQuery } from 'svelte/reactivity';
+    import type { Cell } from "./gridUtils";
+    import { initializeGrid, getAdjacentCell } from "./gridUtils";
     // import type {Snippet} from 'svelte';
+
+    const keypadInts = [7,8,9,4,5,6,1,2,3];
+    const smallerThanDesktop = new MediaQuery('max-width: 1615px');
+    // const smallerThanDesktop = false;
 
     let panelText = $state("");
     let displayedPanel = $state("Keypad");
+    let gridState:Cell[][] = $state(initializeGrid());
+    let selectedCells:Cell[] = $state([]);
+    let lastSelected:Cell = $derived(gridState[0][0]);
+    let gridStateRows:Cell[][] = $derived(reorganizeGrid(gridState)); // 0 based
+    let gridStateCols:Cell[][] = $derived(gridStateRows[0].map((_,colIndex) => gridStateRows.map(row => row[colIndex])));
 
-    const smallerThanDesktop = new MediaQuery('max-width: 1615px');
-    // const smallerThanDesktop = false;
+    function reorganizeGrid(boxGrid:Cell[][]) {
+        const rowGrid:Cell[][] = [[],[],[],[],[],[],[],[],[]];
+        for (const [boxIndex,box] of boxGrid.entries()) { // for each box of the grid
+            if ([0,1,2].includes(boxIndex)) { // if the box is box 1,2, or 3, but 0 based
+                rowGrid[0].push(...box.slice(0,3)); // builds row 1 with [[1,1], [1,2], [1,3]],..
+                rowGrid[1].push(...box.slice(3,6)); // builds row 2
+                rowGrid[2].push(...box.slice(6,9)); // builds row 3
+            }
+            if ([3,4,5].includes(boxIndex)) { // boxes 4,5,6
+                rowGrid[3].push(...box.slice(0,3)); // 4
+                rowGrid[4].push(...box.slice(3,6)); // 5
+                rowGrid[5].push(...box.slice(6,9)); // 6
+            }
+            if ([6,7,8].includes(boxIndex)) {  // boxes 7,8,9
+                rowGrid[6].push(...box.slice(0,3)); // 7
+                rowGrid[7].push(...box.slice(3,6)); // 8
+                rowGrid[8].push(...box.slice(6,9)); // 9
+            }
+        }
+        return rowGrid; // 0 based
+    }
+
+    function getSeenCells(originCell:Cell){ 
+        // const merged = [...new Set([...array1, ...array2])];
+        // take box, row, and col and put them in a Set which removes duplicates, and convert the set back to an array
+        const visibileCells:Cell[] = [... new Set([
+            ...gridState[originCell.boxNumber - 1],
+            ...gridStateRows[originCell.rowNumber0based],
+            ...gridStateCols[originCell.colNumber0based]
+        ])];
+        return visibileCells
+    }
+
+    function fillCell(targetCell:Cell, fillValue:number) {
+        // console.log("fillCell ran")
+        targetCell.fillNumber = fillValue;
+        const seenCells = getSeenCells(targetCell);
+        for (const cell of seenCells!) { // cells will always exist and see eachother
+            cell.candidates[keypadInts.indexOf(fillValue)] = false;
+        }
+    }
 
     function setPanelText() {
         if (panelText === "") {
@@ -26,7 +76,7 @@
     });
 
 
-    const keypadNumbers = ["7","8","9","4","5","6","1","2","3"];
+    const keypadStrings = ["7","8","9","4","5","6","1","2","3"];
     const panelLabels = ["Keypad","Info"];
 </script>
 
@@ -42,7 +92,7 @@
 
     <div class="sudoku-grid-container">
         <IsometricBorder color="primary">
-            <SudokuGrid/>
+            <SudokuGrid bind:gridState bind:selectedCells bind:lastSelected {fillCell}/>
         </IsometricBorder>
     </div>
 
@@ -50,7 +100,7 @@
         <div class="right-panel">
             <h1 class="text-primary cascadia-code">Keypad</h1>
             <div class="keypad">
-                {#each keypadNumbers as num}
+                {#each keypadStrings as num}
                     <KeypadButton label={num} color="primary" toggle={false} onchangeHandler={setPanelText}/>
                 {/each}
                 <KeypadButton label="D" color="secondary" toggle={false} onchangeHandler={setPanelText}/>

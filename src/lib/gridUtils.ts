@@ -1,13 +1,8 @@
 export interface Cell { 
+    boxNumber: number; // 1 based, per initializeGrid
+    positionInBox: number; // 1 based -- boxNumber:grid::positionInBox:box first row is 1,2,3 2nd row is 4,5,6 3rd row is 7,8,9
 
-    // I need a way to make this fill in the other values when the cell is created. idk if it needs to be a class or it can be done in the function
-
-
-    boxNumber: number;
-    positionInBox: number; // boxNumber:grid::positionInBox:box first row is 1,2,3 2nd row is 4,5,6 3rd row is 7,8,9
-
-    isfilled:boolean;
-    fillNumber?: number;
+    fillNumber: number | null;
     candidates: boolean[];
 
     rowNumber1based: number;
@@ -16,16 +11,65 @@ export interface Cell {
     colNumber0based: number;
 }
 
+export function getAdjacentCell(originCell:Cell, direction:string) {
+    const gridBoxIndex = originCell.boxNumber - 1;
+    const gridcellIndex = originCell.positionInBox - 1;
+    const row1based = originCell.rowNumber1based;
+    const col1based = originCell.colNumber1based;
+    
+    if (direction === "ArrowUp" ) {
+        if (row1based === 1) { 
+            return[gridBoxIndex, gridcellIndex];
+        } else if (row1based === 4 || row1based == 7) {
+            return[gridBoxIndex - 3, gridcellIndex + 6]; // go from box 4 cell 3 to box 1 cell 9, or row 4 to row 3
+        } else {
+            return[gridBoxIndex, gridcellIndex - 3]; // go from box 4 cell 4 to box 4 cell 1, or row 5 to row 4
+        }
+    }
+
+    if (direction === "ArrowDown") {
+        if (row1based === 9) {
+            return[gridBoxIndex, gridcellIndex];
+        } else if (row1based === 6 || row1based === 3) {
+            return[gridBoxIndex + 3, gridcellIndex - 6]; // go from box 5 cell 7 to box 8 cell 1, or row 6 to row 7
+        } else {
+            return[gridBoxIndex, gridcellIndex + 3]; // go from box 5 cell 4 to box 5 cell 7, or row 5 to row 6
+        }
+    }
+
+    if (direction === "ArrowLeft" ) {
+        if (col1based === 1) { 
+            return[gridBoxIndex, gridcellIndex];
+        } else if (col1based === 4 || col1based == 7) {
+            return[gridBoxIndex - 1, gridcellIndex + 2]; // go from box 5 cell 4 to box 4 cell 6, or col 4 to col 3
+        } else {
+            return[gridBoxIndex, gridcellIndex - 1]; // go from box 5 cell 3 to box 5 cell 2, or col 6 to col 5
+        }
+    }
+
+    if (direction === "ArrowRight" ) {
+        if (col1based === 9) { 
+            return[gridBoxIndex, gridcellIndex];
+        } else if (col1based === 6 || col1based == 3) {
+            return[gridBoxIndex + 1, gridcellIndex - 2]; // go from box 4 cell 3 to box 5 cell 1, or col 3 to col 4
+        } else {
+            return[gridBoxIndex, gridcellIndex + 1]; // go from box 5 cell 8 to box 5 cell 9, or col 5 to col 6
+        }
+    }
+
+    return[gridBoxIndex, gridcellIndex]; // if key is something else
+}
+
 export function initializeGrid(){
-    const cellArray:Cell[] = [];
     const boxArray:Cell[][] = [];
     for (let boxNum = 0; boxNum < 9; boxNum++) {
+        const cellArray:Cell[] = [];
         for (let cellPos = 0; cellPos < 9; cellPos++) {
             cellArray.push({
                 boxNumber:boxNum + 1,
                 positionInBox:cellPos + 1,
-                candidates:[false,false,false,false,false,false,false,false,false],
-                isfilled: false,
+                candidates:[true,true,true,true,true,true,true,true,true],
+                fillNumber: null,
                 rowNumber1based:oneBasedLookUpTable[boxNum][cellPos][0],
                 rowNumber0based:oneBasedLookUpTable[boxNum][cellPos][0] - 1,
                 colNumber1based:oneBasedLookUpTable[boxNum][cellPos][1],
@@ -37,7 +81,7 @@ export function initializeGrid(){
     return boxArray;
 }
 
-export const oneBasedLookUpTable = [
+export const oneBasedLookUpTable = [ // could I have done this with an algorithm? yeah, but it would have taken me more time to write
     [[1,1],[1,2],[1,3],
     [2,1],[2,2],[2,3],
     [3,1],[3,2],[3,3]], //box 1
