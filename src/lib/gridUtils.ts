@@ -9,6 +9,9 @@ export interface Cell {
     colNumber1based: number;
     rowNumber0based: number;
     colNumber0based: number;
+
+    ownsBottomBorder: boolean;
+    ownsRightBorder: boolean;
 }
 
 export function getAdjacentCell(originCell:Cell, direction:string) {
@@ -73,7 +76,9 @@ export function initializeGrid(){
                 rowNumber1based:oneBasedLookUpTable[boxNum][cellPos][0],
                 rowNumber0based:oneBasedLookUpTable[boxNum][cellPos][0] - 1,
                 colNumber1based:oneBasedLookUpTable[boxNum][cellPos][1],
-                colNumber0based:oneBasedLookUpTable[boxNum][cellPos][1] - 1
+                colNumber0based:oneBasedLookUpTable[boxNum][cellPos][1] - 1,
+                ownsBottomBorder: false,
+                ownsRightBorder: false
             });
         }
         boxArray.push(cellArray);
@@ -118,36 +123,3 @@ export const oneBasedLookUpTable = [ // could I have done this with an algorithm
     [8,7],[8,8],[8,9],
     [9,7],[9,8],[9,9]]  //box 9  
 ];
-
-export const cellBorders = [
-    ['border-bottom','border-right'], // 0 
-    ['border-bottom','border-right'], // 1 
-    ['border-bottom'], // 2
-    ['border-bottom','border-right'], // 3
-    ['border-bottom','border-right'], // 4
-    ['border-bottom'], // 5
-    ['border-right'], // 6
-    ['border-right'], // 7
-    [] // 8
-];
-export const boxBorders = [
-    ['border-top', 'border-left', 'border-bottom', 'border-right'], // 0
-    ['border-top', 'border-bottom', 'border-right'], // 1
-    ['border-top', 'border-bottom', 'border-right'], // 2
-    ['border-left', 'border-bottom', 'border-right'], // 3
-    ['border-bottom', 'border-right'], // 4
-    ['border-bottom', 'border-right'], // 5
-    ['border-left', 'border-bottom', 'border-right'], // 6
-    ['border-bottom', 'border-right'], // 7
-    ['border-bottom', 'border-right'] // 8
-];
-
-export function addBorders(borderColor : string, borderVar:string, borderPositions : string[][], elementNumber: number): string {
-    let returnString: string = "";
-    for (let borderString of borderPositions[elementNumber]) {
-        if (borderString !== '') {
-            returnString += borderString + ": "+borderVar+" solid var(" + borderColor + "); "
-        }
-    }
-    return returnString;
-};

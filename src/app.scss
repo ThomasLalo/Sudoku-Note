@@ -21,10 +21,7 @@ html {
 
 
     // CHANGE THIS
-    --grid-size: 81vh; //prev 81vmin
-
-
-
+    --grid-size: 81vh; //prev 81vmin, unused I think
     --margin-width: 0.5rem; //prev 1vmin, double --diagonal-length in IsometricBorder.svelte 
     --panel-border-width: 1rem;
     --button-border-width: 0.5rem;

@@ -1,6 +1,7 @@
 <script lang="ts">
     import type { Cell } from "./gridUtils";
-    import { boxBorders, cellBorders, addBorders, getAdjacentCell } from "./gridUtils";
+    import { getAdjacentCell } from "./gridUtils";
+    import { untrack } from "svelte";
     const keypadInts = [7,8,9,4,5,6,1,2,3];
     const invertedKeypadInts = [1,2,3,4,5,6,7,8,9];
 
@@ -8,6 +9,65 @@
     {gridState: Cell[][], selectedCells: Cell[], lastSelected: Cell, fillCell: (targetCell:Cell, fillValue:number) => void} = $props();
 
     let dragSelecting:boolean = $state(false); // idk if I need to move this to App
+
+
+    const cellBorders = [
+        ['border-bottom','border-right'], // 0 
+        ['border-bottom','border-right'], // 1 
+        ['border-bottom'], // 2
+        ['border-bottom','border-right'], // 3
+        ['border-bottom','border-right'], // 4
+        ['border-bottom'], // 5
+        ['border-right'], // 6
+        ['border-right'], // 7
+        [] // 8
+    ];
+    const boxBorders = [
+        ['border-top', 'border-left', 'border-bottom', 'border-right'], // 0
+        ['border-top', 'border-bottom', 'border-right'], // 1
+        ['border-top', 'border-bottom', 'border-right'], // 2
+        ['border-left', 'border-bottom', 'border-right'], // 3
+        ['border-bottom', 'border-right'], // 4
+        ['border-bottom', 'border-right'], // 5
+        ['border-left', 'border-bottom', 'border-right'], // 6
+        ['border-bottom', 'border-right'], // 7
+        ['border-bottom', 'border-right'] // 8
+    ];
+
+    function addBorders(borderColor : string, borderVar:string, elementType: string, elementNumber: number, targetBoxIndex?: number, targetCellIndex?:number): string {
+        let borderPositions:string[][] = [];
+        if (elementType === "cell") {
+            const targetCell = gridState[targetBoxIndex!][targetCellIndex!]; // the if means its always exists
+            borderPositions = cellBorders;
+
+            // immutability is the source of all my frustration with programming. pure js would be less annoying at this point, then I wouldn't have to deal with these stupid conventions.
+            // there is a zero percent chance I remake this with react
+            // these values will never change, I just need them to be set and accessible from Cell objects in the gridState structure
+            // if they never change then nothing needs to react to them changing and so they don't need to be tracked. 
+            untrack( () => {
+                if (borderPositions[elementNumber].includes("border-bottom")) {
+                    targetCell.ownsBottomBorder = true; 
+                }
+
+                if (borderPositions[elementNumber].includes("border-right")) {
+                    targetCell.ownsRightBorder = true;            
+                }
+            });
+        }
+
+        if (elementType === "box") {
+            borderPositions = boxBorders;
+        }
+
+            let returnString: string = "";
+        for (let borderString of borderPositions[elementNumber]) {
+            if (borderString !== '') {
+                returnString += borderString + ": "+borderVar+" solid var(" + borderColor + "); "
+            }
+        }
+        return returnString;
+    };
+
 
     function selectCell(box:number,cell:number) { // this needs work
         const cellObj = gridState[box][cell];
@@ -46,7 +106,7 @@
 
     let gridElement: HTMLDivElement | undefined; // grid element might be undefined when the page first loads. see the bind:this on sudoku-grid in the html
     function handleGlobalMouseDown(event:MouseEvent) {
-        // DOM arcana. event.tagret doesn't have to be a DOM node. as Node tells typescript it will be a Node, and elements are Nodes
+        // DOM arcana. event.target doesn't have to be a DOM node. as Node tells typescript it will be a Node, and elements are Nodes
         // gridElement? ensures .contains() won't try to run on an undefined and throw an error
         if (gridElement?.contains(event.target as Node)) {
             return;
@@ -62,7 +122,7 @@
             
             if (selectedCells.length !== 0) {
 
-                // ! is not .at() syntax. it is a non-null assertion, I'm telling typescript this cell will always exist. it will becasue of the if block
+                // ! is not .at() syntax. it is a non-null assertion, I'm telling typescript this cell will always exist. it will because of the if block
                 const [newBox, newCellPos] = getAdjacentCell(selectedCells.at(-1)!, event.key);
                 
                 if (!event.shiftKey) { 
@@ -100,7 +160,7 @@
 <div class="sudoku-grid" bind:this={gridElement}>
 
     {#each {length:9}, boxNumber }
-        <div class="sudoku-box border-primary" style="{addBorders("--color-primary-light", "var(--box-border-size)", boxBorders, boxNumber)}">
+        <div class="sudoku-box border-primary" style="{addBorders("--color-primary-light", "var(--box-border-size)", "box", boxNumber)}">
 
             {#each {length:9}, cellNumber }
                 <!-- {selectedCells.some(object => object.boxNumber === boxNumber + 1 && object.positionInBox === cellNumber + 1) ? "selected" : "" }" 
@@ -109,7 +169,7 @@
                     class="sudoku-cell bg-background-lightest border-text-grayed
                         {selectedCells.some(object => object.boxNumber === boxNumber + 1 && object.positionInBox === cellNumber + 1) ? "selected" : "" }" 
 
-                    style="{addBorders("--color-text-grayed", "var(--cell-border-size)", cellBorders, cellNumber)}" 
+                    style="{addBorders("--color-text-grayed", "var(--cell-border-size)", "cell", cellNumber, boxNumber, cellNumber)}" 
                     onmousedown={() => handleMouseDown(boxNumber,cellNumber)} 
                     onmouseenter={() => handleMouseEnter(boxNumber,cellNumber)}
                     onmouseup={handleMouseUp}
@@ -118,7 +178,7 @@
                 > <!-- I'm not sure about using tabindex like that, but it makes the warning go away. there might be a better way, but I'll figure that out later -->
 
                     {#if gridState[boxNumber][cellNumber].fillNumber !== null}
-                        <div class="value-contianer">
+                        <div class="value-container">
                             <span class="value text-text cascadia-code">{gridState[boxNumber][cellNumber].fillNumber}</span>
                         </div>
                         
@@ -126,7 +186,7 @@
                         <div class="candidate-grid">
                             {#each keypadInts as num, index}
                                 {#if gridState[boxNumber][cellNumber].candidates[index]}
-                                    <!-- so when a candidate is false, the grid layout reorder which is default css grid behaviour 
+                                    <!-- so when a candidate is false, the grid layout reorder which is default css grid behavior 
                                     I could fix this by adding grid-areas though -->
                                     <span class="candidate text-text-grayed cascadia-code"> {num} </span> 
                                 {/if}
@@ -180,7 +240,7 @@
         background-color: var(--color-accent-lighter);
     }
 
-    .value-contianer {
+    .value-container {
         display: flex;
         align-items: center;
         justify-content: center;
