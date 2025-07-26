@@ -9,6 +9,11 @@ export interface Cell {
     colNumber1based: number;
     rowNumber0based: number;
     colNumber0based: number;
+
+    width: number;
+    height: number;
+
+    element?:HTMLElement;
 }
 
 export function getAdjacentCell(originCell:Cell, direction:string) {
@@ -73,7 +78,10 @@ export function initializeGrid(){
                 rowNumber1based:oneBasedLookUpTable[boxNum][cellPos][0],
                 rowNumber0based:oneBasedLookUpTable[boxNum][cellPos][0] - 1,
                 colNumber1based:oneBasedLookUpTable[boxNum][cellPos][1],
-                colNumber0based:oneBasedLookUpTable[boxNum][cellPos][1] - 1
+                colNumber0based:oneBasedLookUpTable[boxNum][cellPos][1] - 1,
+                width:0,
+                height:0
+                
             });
         }
         boxArray.push(cellArray);

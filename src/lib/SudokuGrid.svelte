@@ -9,6 +9,21 @@
 
     let dragSelecting:boolean = $state(false); // idk if I need to move this to App
 
+    function drawSelectionSVG() {
+        let rectString = "";
+        for (let selection of selectedCells) {
+            const left = selection.element!.offsetLeft;
+            const top = selection.element!.offsetTop;
+            const width = selection.width;
+            const height = selection.height;
+            rectString += `<rect x="${left-4}" y="${top-4}" width="${width+9}" height="6.5px" fill="var(--color-accent)" ></rect>`;
+            rectString += `<rect x="${left-4}" y="${top}" width="6.5px" height="${height}" fill="var(--color-accent)" ></rect>`;
+            rectString += `<rect x="${left-4}" y="${top + height-2}" width="${width+9}" height="6.5px" fill="var(--color-accent)" ></rect>`;
+            rectString += `<rect x="${left + width-2}" y="${top}" width="7px" height="${height}" fill="var(--color-accent)" ></rect>`;
+        }
+        return rectString;
+    }
+
     function selectCell(box:number,cell:number) { // this needs work
         const cellObj = gridState[box][cell];
         const isSelected = selectedCells.includes(cellObj);
@@ -113,9 +128,12 @@
                     onmousedown={() => handleMouseDown(boxNumber,cellNumber)} 
                     onmouseenter={() => handleMouseEnter(boxNumber,cellNumber)}
                     onmouseup={handleMouseUp}
+                    bind:this = {gridState[boxNumber][cellNumber].element}
+                    bind:offsetWidth = {gridState[boxNumber][cellNumber].width}
+                    bind:offsetHeight = {gridState[boxNumber][cellNumber].height}
                     role="button"
                     tabindex="0"
-                > <!-- I'm not sure about using tabindex like that, but it makes the warning go away. there might be a better way, but I'll figure that out later -->
+                >
 
                     {#if gridState[boxNumber][cellNumber].fillNumber !== null}
                         <div class="value-contianer">
@@ -140,19 +158,37 @@
         </div>
     {/each}
 
+    <svg class="svg-overlay">
+        {@html drawSelectionSVG()}
+    </svg>
+
 </div>
 
 
 
 <style lang="scss">    
     .sudoku-grid {
-        --cell-border-size: 0.15rem;
-        --box-border-size: 0.3rem;
+        position: relative;
+        --cell-border-size: 2px;
+        --box-border-size: 5px; // I need to figure out how to set this is ts. this value is used, but not with the var, in drawSelectionSVG
+        --box-border-offset: calc(var( var(--box-border-size) + 9vh ));
+        --box-border-edge: calc( var(--box-border-size) * 2 );
         width: 100%;
         height: 100%;
         display: grid;
         grid-template: 1fr 1fr 1fr / 1fr 1fr 1fr;
     }
+
+
+    .svg-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
 
     .sudoku-box {
         display: grid;
@@ -169,7 +205,7 @@
 
     .selected {
         background-color: var(--color-background);
-        border: 0.2rem solid var(--color-accent) !important;
+        // border: 0.2rem solid var(--color-accent) !important;
     //     box-shadow: 
     //         inset 0 0.2rem var(--color-accent), //top
     //         inset 0 -0.2rem var(--color-accent), //bottom
