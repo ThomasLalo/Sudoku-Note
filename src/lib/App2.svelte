@@ -3,15 +3,13 @@
 	import KeypadButton from "./KeypadButton.svelte";
 	import RadioButtons from "./RadioButtons.svelte";
     import SudokuGrid from "./SudokuGrid.svelte";
-    import TextSwitch from "./TextSwitch.svelte";
     import { MediaQuery } from 'svelte/reactivity';
     import type { Cell } from "./gridUtils";
     import { initializeGrid, getAdjacentCell } from "./gridUtils";
-    // import type {Snippet} from 'svelte';
 
     const keypadInts = [7,8,9,4,5,6,1,2,3];
     const smallerThanDesktop = new MediaQuery('max-width: 1615px');
-    // const smallerThanDesktop = false;
+
 
     let panelText = $state("");
     let displayedPanel = $state("Keypad");
@@ -55,7 +53,6 @@
     }
 
     function fillCell(targetCell:Cell, fillValue:number) {
-        // console.log("fillCell ran")
         targetCell.fillNumber = fillValue;
         const seenCells = getSeenCells(targetCell);
         for (const cell of seenCells!) { // cells will always exist and see eachother
@@ -92,7 +89,7 @@
 
     <div class="sudoku-grid-container">
         <IsometricBorder color="primary">
-            <SudokuGrid bind:gridState bind:selectedCells bind:lastSelected {fillCell}/>
+            <SudokuGrid bind:gridState bind:gridStateRows bind:selectedCells bind:lastSelected {fillCell}/>
         </IsometricBorder>
     </div>
 
@@ -111,10 +108,6 @@
     {/if}
 
         <div class="layout-button-container">
-            <!-- I need to make these radio buttons. I think there should be a radio buttons container component that will create the set of buttons instead of each
-            button being its own component-->
-            <!-- <TextSwitch label={"keypad"} onchangeHandler={setPanelText} />
-            <TextSwitch label={"info"} onchangeHandler={setPanelText} /> -->
             <RadioButtons labels={panelLabels} bind:binder={displayedPanel} />
         </div>
 
@@ -161,7 +154,6 @@
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 1rem;
-        // max-width: fit-content;
     }
     .layout-button-container{
         display: none;
@@ -183,7 +175,6 @@
         margin-bottom: calc(var(--horizontal-margin) * 2);
         margin-left: var(--horizontal-margin);
         gap: 2vmin;
-        // justify-self: end;
     }
 
     .left-panel{
@@ -225,7 +216,6 @@
         height: 54vh;
         width: 54vh;
         font-size: 0.7rem;
-        // grid-row: span 1;
     }
     .layout-button-container{
         margin-top: 1rem;
@@ -246,7 +236,6 @@
         height: 95vw;
         width: 95vw;
         font-size: 0.7rem;
-        // grid-row: span 1;
     }
     .layout-button-container{
         margin-top: 1rem;
@@ -256,9 +245,6 @@
     .sudoku-grid-container {
         font-size: 0.5rem;
     }
-    // .app-container {
-    //     background-color: red !important;
-    // }
 }
 @media(max-height:390px) {
     .app-container {
@@ -274,40 +260,9 @@
         height: 95vh;
         width: 95vh;
         font-size: 0.5rem;
-        // grid-row: span 1;
     }
     .layout-button-container{
         margin-top: 1rem;
     }
 }
-
-// @media (max-width: 1214px) { // phone portrait
-
-// }
-
-// @media (max-height: 753px) and (max-width: 1209px) { //phone landscape
-//     .app-container {
-//         grid-template-columns: auto 1fr;
-//         grid-template-rows: auto 1fr;
-//         grid-template-areas:
-//         "sudoku button button"
-//         "sudoku keypad info"
-//         ;
-
-//     }
-//     .sudoku-grid-container {
-//         grid-row: span 2;
-//     }
-//     .layout-button-container{
-//         display: flex;
-//         margin-bottom: calc(var(--horizontal-margin) * 2);
-//         margin-left: var(--horizontal-margin);
-//         gap: 2vmin;
-//         // justify-self: end;
-//     }
-
-//     .left-panel{
-//         margin-right: var(--horizontal-margin);
-//     }
-// }
 </style>

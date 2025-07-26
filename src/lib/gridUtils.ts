@@ -1,18 +1,23 @@
-export interface Cell { 
+export interface Cell {
     boxNumber: number; // 1 based, per initializeGrid
     positionInBox: number; // 1 based -- boxNumber:grid::positionInBox:box first row is 1,2,3 2nd row is 4,5,6 3rd row is 7,8,9
 
+
     fillNumber: number | null;
     candidates: boolean[];
+
 
     rowNumber1based: number;
     colNumber1based: number;
     rowNumber0based: number;
     colNumber0based: number;
 
-    ownsBottomBorder: boolean;
-    ownsRightBorder: boolean;
+
+    isSelected: boolean;
+    bottomNeighborSeleted: boolean;
+    rightNeighborSelected: boolean;
 }
+
 
 export function getAdjacentCell(originCell:Cell, direction:string) {
     const gridBoxIndex = originCell.boxNumber - 1;
@@ -77,8 +82,9 @@ export function initializeGrid(){
                 rowNumber0based:oneBasedLookUpTable[boxNum][cellPos][0] - 1,
                 colNumber1based:oneBasedLookUpTable[boxNum][cellPos][1],
                 colNumber0based:oneBasedLookUpTable[boxNum][cellPos][1] - 1,
-                ownsBottomBorder: false,
-                ownsRightBorder: false
+                isSelected: false,
+                bottomNeighborSeleted: false,
+                rightNeighborSelected: false
             });
         }
         boxArray.push(cellArray);
