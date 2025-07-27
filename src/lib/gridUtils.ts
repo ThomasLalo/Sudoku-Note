@@ -10,6 +10,8 @@ export interface Cell {
     rowNumber0based: number;
     colNumber0based: number;
 
+    isSelected: boolean;
+
     width: number;
     height: number;
 
@@ -79,9 +81,9 @@ export function initializeGrid(){
                 rowNumber0based:oneBasedLookUpTable[boxNum][cellPos][0] - 1,
                 colNumber1based:oneBasedLookUpTable[boxNum][cellPos][1],
                 colNumber0based:oneBasedLookUpTable[boxNum][cellPos][1] - 1,
+                isSelected:false,
                 width:0,
                 height:0
-                
             });
         }
         boxArray.push(cellArray);

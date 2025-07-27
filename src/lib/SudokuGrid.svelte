@@ -4,10 +4,12 @@
     const keypadInts = [7,8,9,4,5,6,1,2,3];
     const invertedKeypadInts = [1,2,3,4,5,6,7,8,9];
 
-    let {gridState = $bindable(), selectedCells = $bindable(), lastSelected = $bindable(), fillCell}:
-    {gridState: Cell[][], selectedCells: Cell[], lastSelected: Cell, fillCell: (targetCell:Cell, fillValue:number) => void} = $props();
+    let {gridState = $bindable(), gridStateRows = $bindable(), selectedCells = $bindable(), lastSelected = $bindable(), fillCell}:
+    {gridState: Cell[][], gridStateRows: Cell[][], selectedCells: Cell[], lastSelected: Cell, fillCell: (targetCell:Cell, fillValue:number) => void} = $props();
 
-    let dragSelecting:boolean = $state(false); // idk if I need to move this to App
+    let dragAdding = false;
+    let dragRemoving = false;
+    // let cellsSelectedThisclick:Cell[] = [];
 
     function drawSelectionSVG() {
         let rectString = "";
@@ -16,57 +18,90 @@
             const top = selection.element!.offsetTop;
             const width = selection.width;
             const height = selection.height;
-            rectString += `<rect x="${left-4}" y="${top-4}" width="${width+9}" height="6.5px" fill="var(--color-accent)" ></rect>`;
-            rectString += `<rect x="${left-4}" y="${top}" width="6.5px" height="${height}" fill="var(--color-accent)" ></rect>`;
-            rectString += `<rect x="${left-4}" y="${top + height-2}" width="${width+9}" height="6.5px" fill="var(--color-accent)" ></rect>`;
-            rectString += `<rect x="${left + width-2}" y="${top}" width="7px" height="${height}" fill="var(--color-accent)" ></rect>`;
+
+            const row = selection.rowNumber0based;
+            const col = selection.colNumber0based;
+            if (row === 0 || !gridStateRows[row-1][col].isSelected) {
+                rectString += `<rect x="${left}" y="${top}" width="${width}" height="5px" fill="var(--color-accent)" ></rect>`;
+            }
+            // Left neighbor - check if col-1 exists and if that cell is not selected
+            if (col === 0 || !gridStateRows[row][col-1].isSelected) {
+                rectString += `<rect x="${left}" y="${top}" width="5px" height="${height}" fill="var(--color-accent)" ></rect>`;
+            }
+            // Right neighbor - check if col+1 exists and if that cell is not selected
+            if (col === gridStateRows[row].length - 1 || !gridStateRows[row][col+1].isSelected) {
+                rectString += `<rect x="${left + width}" y="${top}" width="5px" height="${height}" fill="var(--color-accent)" ></rect>`;
+            }
+            // Bottom neighbor - check if row+1 exists and if that cell is not selected
+            if (row === gridStateRows.length - 1 || !gridStateRows[row+1][col].isSelected) {
+                rectString += `<rect x="${left}" y="${top + height}" width="${width}" height="5px" fill="var(--color-accent)" ></rect>`;
+            }
         }
         return rectString;
     }
 
-    function selectCell(box:number,cell:number) { // this needs work
-        const cellObj = gridState[box][cell];
-        const isSelected = selectedCells.includes(cellObj);
-
-        if (isSelected && !dragSelecting) { 
-            selectedCells = selectedCells.filter(value => value !== cellObj);
-        } else if (!isSelected) {
-            selectedCells.push(cellObj);
-            lastSelected = cellObj;
+    function clearSelection() {
+        for (let cellObj of selectedCells) {
+            cellObj.isSelected = false;
         }
-        // console.log("current selection:")
-        // for (let sCell of selectedCells) {
-        //     console.log("box:" + sCell.boxNumber.toString() + ","+ "cell:"+ sCell.positionInBox.toString() )
-        // }
-        // console.log("\n")
-    }
-
-    function handleMouseDown(boxNumber:number, cellNumber:number) {
         selectedCells = [];
-        dragSelecting = true;
-        selectCell(boxNumber,cellNumber);
     }
-    function handleMouseEnter(boxNumber:number, cellNumber:number) {
-        if (dragSelecting) {
-            selectCell(boxNumber,cellNumber);
+
+    function addToSelection(box:number,cell:number) {
+        const cellObj = gridState[box][cell];
+        cellObj.isSelected = true;
+        selectedCells.push(cellObj);
+        lastSelected = cellObj;
+    }
+
+    function removeFromSelection(box:number,cell:number) {
+        const cellObj = gridState[box][cell];
+        cellObj.isSelected = false;
+        selectedCells = selectedCells.filter(value => value !== cellObj);
+    }
+
+    function handleMouseDown(event:MouseEvent, boxNumber:number, cellNumber:number) {
+        const cellObj = gridState[boxNumber][cellNumber];
+        if (!event.shiftKey) {
+            clearSelection();
+        }
+        if (cellObj.isSelected) {
+            dragRemoving = true;
+            removeFromSelection(boxNumber,cellNumber);
+        } else {
+            dragAdding = true;
+            addToSelection(boxNumber,cellNumber);
         }
     }
+
+    function handleMouseEnter(boxNumber:number, cellNumber:number) {
+        if (dragAdding) {
+            addToSelection(boxNumber,cellNumber);
+        }
+        if (dragRemoving) {
+            removeFromSelection(boxNumber,cellNumber);
+        }
+    }
+
     function handleMouseUp() {
-        dragSelecting = false;
+        dragAdding = false;
+        dragRemoving = false;
+        
     }
 
     function handleGlobalMouseUp() {
-        dragSelecting = false;
+        dragAdding = false;
+        dragRemoving = false;
     }
 
     let gridElement: HTMLDivElement | undefined; // grid element might be undefined when the page first loads. see the bind:this on sudoku-grid in the html
     function handleGlobalMouseDown(event:MouseEvent) {
-        // DOM arcana. event.tagret doesn't have to be a DOM node. as Node tells typescript it will be a Node, and elements are Nodes
+        // DOM arcana. event.target doesn't have to be a DOM node. as Node tells typescript it will be a Node, and elements are Nodes
         // gridElement? ensures .contains() won't try to run on an undefined and throw an error
         if (gridElement?.contains(event.target as Node)) {
             return;
         }
-        selectedCells = [];
+        clearSelection();
     }
 
 
@@ -77,18 +112,20 @@
             
             if (selectedCells.length !== 0) {
 
-                // ! is not .at() syntax. it is a non-null assertion, I'm telling typescript this cell will always exist. it will becasue of the if block
+                // ! is not .at() syntax. it is a non-null assertion, I'm telling typescript this cell will always exist. it will because of the if block
                 const [newBox, newCellPos] = getAdjacentCell(selectedCells.at(-1)!, event.key);
                 
                 if (!event.shiftKey) { 
                     //only select multiple cells if shift is held down
-                    selectedCells = [];
+                    clearSelection();
                 }
-                selectCell(newBox,newCellPos);
+                // selectCell(newBox,newCellPos);
+                addToSelection(newBox,newCellPos);
 
             } else { 
                 // if nothing is selected then select the cell last previously selected
-                selectCell(lastSelected.boxNumber -1,lastSelected.positionInBox -1);
+                // selectCell(lastSelected.boxNumber -1,lastSelected.positionInBox -1);
+                addToSelection(lastSelected.boxNumber -1,lastSelected.positionInBox -1);
             }
         }
 
@@ -104,7 +141,7 @@
         }
 
         if (event.key === "Escape") {
-            selectedCells = []; 
+            clearSelection();
         }
     }
 
@@ -125,18 +162,18 @@
                         {selectedCells.some(object => object.boxNumber === boxNumber + 1 && object.positionInBox === cellNumber + 1) ? "selected" : "" }" 
 
                     style="{addBorders("--color-text-grayed", "var(--cell-border-size)", cellBorders, cellNumber)}" 
-                    onmousedown={() => handleMouseDown(boxNumber,cellNumber)} 
-                    onmouseenter={() => handleMouseEnter(boxNumber,cellNumber)}
+                    onmousedown={(event) => handleMouseDown(event, boxNumber, cellNumber)} 
+                    onmouseenter={() => handleMouseEnter(boxNumber, cellNumber)}
                     onmouseup={handleMouseUp}
                     bind:this = {gridState[boxNumber][cellNumber].element}
-                    bind:offsetWidth = {gridState[boxNumber][cellNumber].width}
-                    bind:offsetHeight = {gridState[boxNumber][cellNumber].height}
+                    bind:clientWidth = {gridState[boxNumber][cellNumber].width}
+                    bind:clientHeight = {gridState[boxNumber][cellNumber].height}
                     role="button"
                     tabindex="0"
                 >
 
                     {#if gridState[boxNumber][cellNumber].fillNumber !== null}
-                        <div class="value-contianer">
+                        <div class="value-container">
                             <span class="value text-text cascadia-code">{gridState[boxNumber][cellNumber].fillNumber}</span>
                         </div>
                         
@@ -144,7 +181,7 @@
                         <div class="candidate-grid">
                             {#each keypadInts as num, index}
                                 {#if gridState[boxNumber][cellNumber].candidates[index]}
-                                    <!-- so when a candidate is false, the grid layout reorder which is default css grid behaviour 
+                                    <!-- so when a candidate is false, the grid layout reorder which is default css grid behavior 
                                     I could fix this by adding grid-areas though -->
                                     <span class="candidate text-text-grayed cascadia-code"> {num} </span> 
                                 {/if}
@@ -163,7 +200,6 @@
     </svg>
 
 </div>
-
 
 
 <style lang="scss">    
@@ -216,7 +252,7 @@
         background-color: var(--color-accent-lighter);
     }
 
-    .value-contianer {
+    .value-container {
         display: flex;
         align-items: center;
         justify-content: center;

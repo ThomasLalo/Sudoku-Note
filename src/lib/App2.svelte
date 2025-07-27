@@ -46,19 +46,19 @@
     function getSeenCells(originCell:Cell){ 
         // const merged = [...new Set([...array1, ...array2])];
         // take box, row, and col and put them in a Set which removes duplicates, and convert the set back to an array
-        const visibileCells:Cell[] = [... new Set([
+        const visibleCells:Cell[] = [... new Set([
             ...gridState[originCell.boxNumber - 1],
             ...gridStateRows[originCell.rowNumber0based],
             ...gridStateCols[originCell.colNumber0based]
         ])];
-        return visibileCells
+        return visibleCells
     }
 
     function fillCell(targetCell:Cell, fillValue:number) {
         // console.log("fillCell ran")
         targetCell.fillNumber = fillValue;
         const seenCells = getSeenCells(targetCell);
-        for (const cell of seenCells!) { // cells will always exist and see eachother
+        for (const cell of seenCells!) { // cells will always exist and see each other
             cell.candidates[keypadInts.indexOf(fillValue)] = false;
         }
     }
@@ -92,7 +92,7 @@
 
     <div class="sudoku-grid-container">
         <IsometricBorder color="primary">
-            <SudokuGrid bind:gridState bind:selectedCells bind:lastSelected {fillCell}/>
+            <SudokuGrid bind:gridState bind:gridStateRows bind:selectedCells bind:lastSelected {fillCell}/>
         </IsometricBorder>
     </div>
 
