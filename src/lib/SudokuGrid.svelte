@@ -139,6 +139,26 @@
 
         </div>
     {/each}
+    <svg class="svg-overlay">
+        <!-- <rect x="0" y="0" width="9vh" height="var(--box-border-size)" fill="var(--color-accent)" ></rect>
+        <rect x="0" y="0" width="var(--box-border-size)" height="9vh" fill="var(--color-accent)" ></rect>
+        <rect x="0" y="9vh" width="9vh" height="var(--box-border-size)" fill="var(--color-accent)" ></rect>
+        <rect x="9vh" y="0" width="var(--box-border-size)" height="9vh" fill="var(--color-accent)" ></rect> -->
+
+        <rect x="9vh" y="9vh" width="9vh" height="var(--box-border-size)" fill="black" ></rect>
+        <rect x="9vh" y="9vh" width="var(--box-border-size)" height="9vh" fill="black" ></rect>
+        <rect x="9vh" y="18vh" width="9vh" height="var(--box-border-size)" fill="black" ></rect>
+        <rect x="18vh" y="9vh" width="var(--box-border-size)" height="9vh" fill="black" ></rect>
+        <!-- <line x1="0" y1="0" x2="9vh" y2="0" stroke="var(--color-accent)" stroke-width="var(--box-border-edge)"/> 
+        <line x1="0" y1="0" x2="0" y2="9vh" stroke="var(--color-accent)" stroke-width="var(--box-border-edge)"/>
+        <line x1="9vh" y1="0" x2="9vh" y2="9vh" stroke="var(--color-accent)" stroke-width="var(--box-border-size)"/>
+        <line x1="0" y1="9vh" x2="9vh" y2="9vh" stroke="var(--color-accent)" stroke-width="var(--box-border-size)"/> -->
+
+        <!-- <line x1="72vh" y1="72vh" x2="81vh" y2="72vh" stroke="var(--color-accent)" stroke-width="var(--box-border-size)"/>
+        <line x1="72vh" y1="72vh" x2="72vh" y2="81vh" stroke="var(--color-accent)" stroke-width="var(--box-border-size)"/>
+        <line x1="81vh" y1="72vh" x2="81vh" y2="81vh" stroke="var(--color-accent)" stroke-width="var(--box-border-edge)"/>
+        <line x1="72vh" y1="81vh" x2="81vh" y2="81vh" stroke="var(--color-accent)" stroke-width="var(--box-border-edge)"/> -->
+    </svg>
 
 </div>
 
@@ -146,13 +166,25 @@
 
 <style lang="scss">    
     .sudoku-grid {
+        position: relative;
         --cell-border-size: 0.15rem;
         --box-border-size: 0.3rem;
+        --box-border-offset: calc(var( var(--box-border-size) + 9vh ));
+        --box-border-edge: calc( var(--box-border-size) * 2 );
         width: 100%;
         height: 100%;
         display: grid;
         grid-template: 1fr 1fr 1fr / 1fr 1fr 1fr;
     }
+
+    .svg-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
 
     .sudoku-box {
         display: grid;
