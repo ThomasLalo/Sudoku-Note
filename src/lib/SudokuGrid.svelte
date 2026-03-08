@@ -11,34 +11,107 @@
     let dragRemoving = false;
     // let cellsSelectedThisclick:Cell[] = [];
 
-    function drawSelectionSVG() {
+    // function drawSelectionSVG() {
+    //     let rectString = "";
+    //     for (let selection of selectedCells) {
+
+    //         const left = selection.element!.offsetLeft;
+    //         const top = selection.element!.offsetTop;
+    //         const width = selection.width;
+    //         const height = selection.height;
+
+    //         const row = selection.rowNumber0based;
+    //         const col = selection.colNumber0based;
+    //         if (row === 0 || !gridStateRows[row-1][col].isSelected) {
+    //             rectString += `<rect x="${left}" y="${top}" width="${width}" height="5px" fill="var(--color-accent)" ></rect>`;
+    //         }
+    //         // Left neighbor - check if col-1 exists and if that cell is not selected
+    //         if (col === 0 || !gridStateRows[row][col-1].isSelected) {
+    //             rectString += `<rect x="${left}" y="${top}" width="5px" height="${height}" fill="var(--color-accent)" ></rect>`;
+    //         }
+    //         // Right neighbor - check if col+1 exists and if that cell is not selected
+    //         if (col === gridStateRows[row].length - 1 || !gridStateRows[row][col+1].isSelected) {
+    //             rectString += `<rect x="${left + width - 5}" y="${top}" width="5px" height="${height}" fill="var(--color-accent)" ></rect>`;
+    //         }
+    //         // Bottom neighbor - check if row+1 exists and if that cell is not selected
+    //         if (row === gridStateRows.length - 1 || !gridStateRows[row+1][col].isSelected) {
+    //             rectString += `<rect x="${left}" y="${top + height - 5}" width="${width}" height="5px" fill="var(--color-accent)" ></rect>`;
+    //         }
+    //     }
+    //     return rectString;
+    // }
+
+function drawSelectionSVG() {
+        if (selectedCells.length === 0 || !gridElement) return ""; 
+
+        const gridRect = gridElement.getBoundingClientRect();
+        const selectionThick = 5; 
+
+        // Measure real border width to handle 1440p/scaling correctly
+        let cellBorderWidth = 2;
+        const representativeCell = gridStateRows[0][0].element;
+        if (representativeCell) {
+            const style = window.getComputedStyle(representativeCell);
+            cellBorderWidth = parseFloat(style.borderRightWidth) || 0;
+        }
+
         let rectString = "";
+
         for (let selection of selectedCells) {
-            const left = selection.element!.offsetLeft;
-            const top = selection.element!.offsetTop;
-            const width = selection.width;
-            const height = selection.height;
+            if(!selection.element) continue;
+
+            const cellRect = selection.element.getBoundingClientRect();
+            
+            // 1. Calculate Raw Relative Positions
+            const rawLeft = cellRect.left - gridRect.left;
+            const rawTop = cellRect.top - gridRect.top;
+            const rawRight = rawLeft + cellRect.width;
+            const rawBottom = rawTop + cellRect.height;
+
+            // 2. PIXEL SNAP STRATEGY (Floor Left/Top, Ceil Right/Bottom)
+            // This ensures we always strictly fill the pixel grid, preventing 1px gaps.
+            const left = Math.floor(rawLeft);
+            const top = Math.floor(rawTop);
+            const width = Math.ceil(rawRight) - left;
+            const height = Math.ceil(rawBottom) - top;
 
             const row = selection.rowNumber0based;
             const col = selection.colNumber0based;
+            const positionInBox = (row % 3) * 3 + (col % 3);
+            const borders = cellBorders[positionInBox]; 
+            
+            const hasRightBorder = borders.includes('border-right');
+            const hasBottomBorder = borders.includes('border-bottom');
+
+            // 3. Subtract the border from the SNAPPED width/height
+            // We use the raw measured cellBorderWidth.
+            const effectiveWidth = width - (hasRightBorder ? cellBorderWidth : 0);
+            const effectiveHeight = height - (hasBottomBorder ? cellBorderWidth : 0);
+
+            // --- TOP ---
             if (row === 0 || !gridStateRows[row-1][col].isSelected) {
-                rectString += `<rect x="${left}" y="${top}" width="${width}" height="5px" fill="var(--color-accent)" ></rect>`;
+                rectString += `<rect x="${left}" y="${top}" width="${effectiveWidth}" height="${selectionThick}" fill="var(--color-accent)"></rect>`;
             }
-            // Left neighbor - check if col-1 exists and if that cell is not selected
+            
+            // --- LEFT ---
             if (col === 0 || !gridStateRows[row][col-1].isSelected) {
-                rectString += `<rect x="${left}" y="${top}" width="5px" height="${height}" fill="var(--color-accent)" ></rect>`;
+                rectString += `<rect x="${left}" y="${top}" width="${selectionThick}" height="${effectiveHeight}" fill="var(--color-accent)"></rect>`;
             }
-            // Right neighbor - check if col+1 exists and if that cell is not selected
+            
+            // --- RIGHT ---
             if (col === gridStateRows[row].length - 1 || !gridStateRows[row][col+1].isSelected) {
-                rectString += `<rect x="${left + width}" y="${top}" width="5px" height="${height}" fill="var(--color-accent)" ></rect>`;
+                rectString += `<rect x="${left + effectiveWidth - selectionThick}" y="${top}" width="${selectionThick}" height="${effectiveHeight}" fill="var(--color-accent)"></rect>`;
             }
-            // Bottom neighbor - check if row+1 exists and if that cell is not selected
+            
+            // --- BOTTOM ---
             if (row === gridStateRows.length - 1 || !gridStateRows[row+1][col].isSelected) {
-                rectString += `<rect x="${left}" y="${top + height}" width="${width}" height="5px" fill="var(--color-accent)" ></rect>`;
+                rectString += `<rect x="${left}" y="${top + effectiveHeight - selectionThick}" width="${effectiveWidth}" height="${selectionThick}" fill="var(--color-accent)"></rect>`;
             }
         }
         return rectString;
     }
+
+    
 
     function clearSelection() {
         for (let cellObj of selectedCells) {
