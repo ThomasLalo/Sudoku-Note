@@ -1,10 +1,8 @@
 import { expect, test } from '@playwright/test';
 
 async function waitForGridHydration(page: import('@playwright/test').Page) {
-	await page.waitForFunction(() => {
-		const cell = document.querySelector('.sudoku-cell') as (HTMLElement & { __mousedown?: unknown }) | null;
-		return Array.isArray(cell?.__mousedown);
-	});
+	await page.locator('.sudoku-cell').first().waitFor({ state: 'visible' });
+	await page.waitForLoadState('networkidle');
 }
 
 test('renders and selects cells in the layered Sudoku grid', async ({ page }) => {
@@ -20,6 +18,39 @@ test('renders and selects cells in the layered Sudoku grid', async ({ page }) =>
 
 	await grid.locator('.sudoku-cell').nth(30).click();
 	await expect.poll(() => grid.locator('.selection-segment').count()).toBeGreaterThan(0);
+});
+
+test('fills every selected cell from the keypad in write mode', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cells = page.locator('.sudoku-cell');
+	await cells.nth(0).click();
+	await cells.nth(10).click({ modifiers: ['Shift'] });
+
+	const writeMode = page.locator('.keypad input[type="radio"][value="Enter digit"]');
+	await expect(writeMode).toBeChecked();
+	await page.getByRole('button', { name: '3', exact: true }).click();
+
+	await expect(cells.nth(0).locator('.value')).toHaveText('3');
+	await expect(cells.nth(10).locator('.value')).toHaveText('3');
+});
+
+test('leaves number clicks inactive in unfinished keypad modes', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cell = page.locator('.sudoku-cell').first();
+	await expect(page.getByRole('button', { name: 'Delete digit' })).toBeVisible();
+	await expect(page.locator('.keypad input[type="radio"]')).toHaveCount(5);
+	await cell.click();
+	await page.locator('.keypad label[title="Crossout candidate"]').click();
+	await expect(page.getByLabel('Crossout candidate')).toBeChecked();
+	await page.getByRole('button', { name: '4', exact: true }).click();
+
+	await expect(cell.locator('.value')).toHaveCount(0);
 });
 
 test('renders a concave selection across box boundaries', async ({ page }, testInfo) => {

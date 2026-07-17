@@ -1,13 +1,31 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 
-    let { label, color, onchangeHandler, toggle=false, binder=false}:
-    { label:string, color:string, onchangeHandler:() => void, toggle?:boolean, binder?:boolean } = $props();
+	let {
+		label,
+		color,
+		onchangeHandler = () => {},
+		toggle = false,
+		binder = $bindable(''),
+		children
+	}: {
+		label: string;
+		color: string;
+		onchangeHandler?: () => void;
+		toggle?: boolean;
+		binder?: string;
+		children?: Snippet;
+	} = $props();
 
-    function handleChange() {
-        onchangeHandler();
-    }
-    
-    const styleString = `
+	function handleChange() {
+		onchangeHandler();
+	}
+
+	function handleModeChange() {
+		binder = label;
+	}
+
+	const styleString = `
         --bottom-color: var(--color-${color}-dark-static);
         --right-color: var(--color-${color}-light-static); 
         --highlight-color: var(--color-accent); 
@@ -15,56 +33,98 @@
         --box-height: calc(var(--size-font) + 1vmin);
         --box-width: calc(var(--size-font) + 1vmin);
     `;
-
 </script>
 
 {#if toggle}
-    <label class="button-isometric-container style={styleString}">
-        <div class="button-face text-text bg-background cascadia-code"> 
-            {label} 
-            <input type="checkbox" checked={binder} onchange="{onchangeHandler}"/>
-            <div class="button-right-parallelogram"></div>
-            <div class="button-bottom-parallelogram"></div>
-        </div>
-    </label>
-
+	<label
+		class="button-isometric-container"
+		style={styleString}
+		data-preserve-grid-selection
+		title={label}
+	>
+		<div class="button-face text-text bg-background cascadia-code">
+			<span class="button-content" aria-hidden="true">
+				{#if children}
+					{@render children()}
+				{:else}
+					{label}
+				{/if}
+			</span>
+			<input
+				type="radio"
+				name="keypad-mode"
+				value={label}
+				aria-label={label}
+				checked={binder === label}
+				onchange={handleModeChange}
+			/>
+			<div class="button-corner-square"></div>
+			<div class="button-right-parallelogram"></div>
+			<div class="button-bottom-parallelogram"></div>
+		</div>
+	</label>
 {:else}
-    <button class="button-isometric-container" onclick="{handleChange}" style={styleString}>
-        <div class="button-face text-text bg-background cascadia-code"> 
-            {label} 
-            <!-- corner square must come first to be underneath -->
-            <div class="button-corner-square"></div> 
-            <div class="button-right-parallelogram"></div>
-            <div class="button-bottom-parallelogram"></div>
-        </div>
-    </button>
-
+	<button
+		class="button-isometric-container"
+		data-preserve-grid-selection
+		onclick={handleChange}
+		style={styleString}
+		title={label}
+		aria-label={label}
+	>
+		<div class="button-face text-text bg-background cascadia-code">
+			<span class="button-content" aria-hidden={children ? 'true' : undefined}>
+				{#if children}
+					{@render children()}
+				{:else}
+					{label}
+				{/if}
+			</span>
+			<!-- corner square must come first to be underneath -->
+			<div class="button-corner-square"></div>
+			<div class="button-right-parallelogram"></div>
+			<div class="button-bottom-parallelogram"></div>
+		</div>
+	</button>
 {/if}
 
 <style lang="scss">
-    .button-isometric-container {
-        --size-font: 4rem; 
-    }
-    // @media (max-aspect-ratio: 1/1) {
-    //     .button-isometric-container{
-    //         --size-font: 2rem;
-    //     }
-    // }
-        @media (max-width: 1214px) { // phone portrait
-        .button-isometric-container{
-            --size-font: 2rem;
-        }
-    }
-    @media(max-width: 900px) {
-        .button-isometric-container{
-            --size-font: 4rem;
-        }
-    }
-    @media(max-height:680px) {
-        .button-isometric-container{
-            --size-font: 2rem;
-        }
-    }
+	.button-content {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		pointer-events: none;
+	}
 
+	.button-content :global(svg) {
+		width: 65%;
+		height: 65%;
+	}
+
+	.button-isometric-container {
+		--size-font: 4rem;
+	}
+	// @media (max-aspect-ratio: 1/1) {
+	//     .button-isometric-container{
+	//         --size-font: 2rem;
+	//     }
+	// }
+	@media (max-width: 1214px) {
+		// phone portrait
+		.button-isometric-container {
+			--size-font: 2rem;
+		}
+	}
+	@media (max-width: 900px) {
+		.button-isometric-container {
+			--size-font: 4rem;
+		}
+	}
+	@media (max-height: 680px) {
+		.button-isometric-container {
+			--size-font: 2rem;
+		}
+	}
 </style>
-

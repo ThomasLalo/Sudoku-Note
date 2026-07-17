@@ -80,9 +80,11 @@
 
     let gridElement: HTMLDivElement | undefined; // grid element might be undefined when the page first loads. see the bind:this on sudoku-grid in the html
     function handleGlobalMouseDown(event:MouseEvent) {
-        // DOM arcana. event.target doesn't have to be a DOM node. as Node tells typescript it will be a Node, and elements are Nodes
-        // gridElement? ensures .contains() won't try to run on an undefined and throw an error
-        if (gridElement?.contains(event.target as Node)) {
+        const target = event.target;
+        if (target instanceof Node && gridElement?.contains(target)) {
+            return;
+        }
+        if (target instanceof Element && target.closest('[data-preserve-grid-selection]')) {
             return;
         }
         clearSelection();
