@@ -260,6 +260,8 @@
     <div class="grid-layer cell-content-layer">
         {#each gridStateRows as row}
             {#each row as cell (cell.boxNumber + "-" + cell.positionInBox)}
+                <!-- Keyboard interaction uses the grid's selection state through the window keydown handler. -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div
                     class="sudoku-cell"
                     onmousedown={(event) => handleMouseDown(event, cell.boxNumber - 1, cell.positionInBox - 1)}
@@ -269,8 +271,6 @@
                     bind:this={cell.element}
                     bind:clientWidth={cell.width}
                     bind:clientHeight={cell.height}
-                    role="button"
-                    tabindex="0"
                 >
                     {#if cell.fillNumber !== null}
                         <div class="value-container">
