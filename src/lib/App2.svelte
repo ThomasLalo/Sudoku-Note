@@ -100,7 +100,7 @@
         <div class="right-panel">
             <h1 class="text-primary cascadia-code">Keypad</h1>
             <div class="keypad">
-                {#each keypadStrings as num}
+                {#each keypadStrings as num (num)}
                     <KeypadButton label={num} color="primary" toggle={false} onchangeHandler={setPanelText}/>
                 {/each}
                 <KeypadButton label="D" color="secondary" toggle={false} onchangeHandler={setPanelText}/>

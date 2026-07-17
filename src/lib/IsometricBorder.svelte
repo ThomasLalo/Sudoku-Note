@@ -32,20 +32,22 @@
     .right-parallelogram {
         position: absolute;
         width: var(--diagonal-length);
-        height: 100%;
+        height: calc(100% - 1px);
         transform: skew(0,45deg);
         transform-origin: left top;
         left: 100%;
+        top: 1px;
         box-shadow: inset 0 -1px var(--right-color); // fixes gap between rectangles caused by anti-aliasing
     }
 
     .bottom-parallelogram {
         position: absolute;
-        width: 100%;
+        width: calc(100% - 1px);
         height: var(--diagonal-length);
         transform: skew(45deg);
         transform-origin: left top;
         top: 100%;
+        left: 1px;
         box-shadow: inset -1px 0 var(--bottom-color);
     }
         @media(max-width: 450px) {
