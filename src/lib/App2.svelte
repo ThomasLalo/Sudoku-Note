@@ -168,6 +168,19 @@
         grid-area: button;
     }
 
+@media (min-width: 1616px) { // desktop
+    .app-container {
+        flex: 1 1 0;
+        min-height: 0;
+    }
+
+    .sudoku-grid-container {
+        // Leave room for the isometric edge so the complete grid fits in the viewport.
+        height: calc(100% - var(--panel-border-width));
+        width: auto;
+    }
+}
+
 @media (max-width: 1615px) { //tablet landscape
     .app-container {
         grid-template-columns: auto 1fr;

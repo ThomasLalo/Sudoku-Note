@@ -104,3 +104,21 @@ test('keeps the isometric correction at the mobile border size', async ({ page }
 	await expect(border.locator('.right-parallelogram')).toHaveCSS('top', '1px');
 	await expect(border.locator('.bottom-parallelogram')).toHaveCSS('left', '1px');
 });
+
+test('uses even spacing above and below the grid on desktop', async ({ page }) => {
+	await page.setViewportSize({ width: 1920, height: 1080 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const gridBounds = await page.locator('.sudoku-grid').boundingBox();
+	const bottomEdgeBounds = await page.locator('.bottom-parallelogram').first().boundingBox();
+
+	expect(gridBounds).not.toBeNull();
+	expect(bottomEdgeBounds).not.toBeNull();
+	if (!gridBounds || !bottomEdgeBounds) return;
+
+	expect(gridBounds.height).toBeGreaterThan(0.85 * 1080);
+	const topSpace = gridBounds.y;
+	const bottomSpace = 1080 - (bottomEdgeBounds.y + bottomEdgeBounds.height);
+	expect(bottomSpace).toBeCloseTo(topSpace, 0);
+});

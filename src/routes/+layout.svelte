@@ -62,6 +62,23 @@
 
 
 <style lang="scss">
+    @media(min-width: 1616px) {
+        main {
+            --desktop-grid-spacing: calc(2.4rem + var(--margin-width) + var(--button-border-width));
+
+            display: flex;
+            flex-direction: column;
+            height: 100dvh;
+            padding-bottom: var(--desktop-grid-spacing);
+            overflow: hidden;
+        }
+
+        header {
+            flex: 0 0 auto;
+            height: 2.4rem;
+        }
+    }
+
     header{
         display: flex;
         justify-content: space-between;
