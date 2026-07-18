@@ -87,7 +87,7 @@
 <div class="app-container">
 	{#if displayedPanel === 'Info' || !smallerThanDesktop.current}
 		<div class="left-panel">
-			<IsometricBorder color="secondary">
+			<IsometricBorder color="secondary" fitHeight>
 				<div class="info-content bg-background-lightest">
 					<h1 class="text-primary cascadia-code">Lorem ipsum</h1>
 					<p class="text-text cascadia-code">
@@ -116,7 +116,7 @@
 
 	{#if displayedPanel === 'Keypad' || !smallerThanDesktop.current}
 		<div class="right-panel">
-			<IsometricBorder color="accent">
+			<IsometricBorder color="accent" fitContent>
 				<div class="keypad-content bg-background-lightest">
 					<h1 class="text-primary cascadia-code">Keypad</h1>
 					<div class="keypad">
@@ -187,7 +187,9 @@
 		aspect-ratio: 1;
 		height: 81vh;
 		width: 81vh;
-		margin-right: var(--panel-border-width);
+		// The isometric edge occupies the panel-width portion of this margin.
+		// Keep one horizontal margin visible after it, matching the info-panel side.
+		margin-right: calc(var(--horizontal-margin) + var(--panel-border-width));
 		margin-left: var(--horizontal-margin);
 
 		grid-area: sudoku;
@@ -197,6 +199,8 @@
 		margin-right: calc(var(--horizontal-margin) + var(--panel-border-width));
 		margin-left: var(--horizontal-margin);
 		margin-bottom: var(--panel-border-width);
+		align-self: start;
+		justify-self: start;
 
 		grid-area: keypad;
 	}
@@ -215,6 +219,10 @@
 
 	.keypad-content {
 		border: var(--panel-face-border-size) solid var(--color-accent-light);
+		// Button faces define the grid size, while their isometric edges overflow it.
+		// Add that edge depth so the visible right/bottom whitespace matches the left.
+		padding-right: calc(0.5vw + var(--button-border-width));
+		padding-bottom: calc(0.5vw + var(--button-border-width));
 	}
 
 	.left-panel h1,

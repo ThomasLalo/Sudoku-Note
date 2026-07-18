@@ -1,10 +1,15 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	let { color, children }: { color: string; children: Snippet } = $props();
+	let {
+		color,
+		fitContent = false,
+		fitHeight = false,
+		children
+	}: { color: string; fitContent?: boolean; fitHeight?: boolean; children: Snippet } = $props();
 </script>
 
 <!-- style="background-image: linear-gradient(to left, var(--color-background-lightest), var(--color-{color}-lighter));" -->
-<div class="isometric-container">
+<div class:fit-content={fitContent} class:fit-height={fitHeight} class="isometric-container">
 	<div class="face text-primary bg-background-lightest cascadia-code">{@render children()}</div>
 	<!-- Covers the antialiased seam where the two isometric faces meet. -->
 	<div class="corner-square bg-{color}-light-static"></div>
@@ -26,12 +31,31 @@
 		--diagonal-length: var(--panel-border-width);
 	}
 
+	.isometric-container.fit-content {
+		height: fit-content;
+		width: fit-content;
+	}
+
+	.isometric-container.fit-height {
+		height: fit-content;
+	}
+
 	.face {
 		position: absolute;
 		height: 100%;
 		width: 100%;
 		top: 0;
 		left: 0;
+	}
+
+	.fit-content .face,
+	.fit-height .face {
+		position: relative;
+		height: auto;
+	}
+
+	.fit-content .face {
+		width: auto;
 	}
 
 	.right-parallelogram {
