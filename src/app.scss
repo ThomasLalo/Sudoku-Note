@@ -44,7 +44,7 @@ $light-colors: (
 	text: hsl(218, 87%, 6%),
 	background: hsl(223, 84%, 95%),
 	primary: hsl(218, 86%, 28%),
-	secondary: hsl(346, 86%, 69%),
+	secondary: hsl(355, 93%, 59%),
 	accent: hsl(29, 86%, 49%)
 );
 
@@ -96,12 +96,18 @@ $dark-colors: (
 // Override with dark theme colors when data-theme="dark" is set
 [data-theme='dark'] {
 	@each $name, $color in $dark-colors {
-		--color-#{$name}: #{$color}; // Override base color with dark version
-		--color-#{$name}-lightest: #{color.mix(
-				white,
-				$color,
-				10%
-			)}; // Lighter variant: --color-primary-lightest
+		$base-color: $color;
+		$lightest-color: color.mix(white, $color, 10%);
+
+		// In dark mode, use the slightly lighter surface for the page and
+		// the deepest background color for grids and panels.
+		@if $name == background {
+			$base-color: $lightest-color;
+			$lightest-color: $color;
+		}
+
+		--color-#{$name}: #{$base-color}; // Override base color with dark version
+		--color-#{$name}-lightest: #{$lightest-color};
 		--color-#{$name}-lighter: #{color.mix(black, $color, 50%)};
 		--color-#{$name}-light: #{color.scale(
 				$color,

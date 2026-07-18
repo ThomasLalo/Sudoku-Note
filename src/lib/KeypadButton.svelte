@@ -27,9 +27,9 @@
 
 	const styleString = `
         --bottom-color: var(--color-${color}-dark-static);
-        --right-color: var(--color-${color}-light-static); 
-        --highlight-color: var(--color-accent); 
-        --highlight-color-dark: var(--color-accent-dark);
+        --right-color: var(--color-${color}-light-static);
+        --highlight-color: var(--color-${color}-light);
+        --highlight-color-dark: var(--color-${color}-dark);
         --box-height: calc(var(--size-font) + 1vmin);
         --box-width: calc(var(--size-font) + 1vmin);
     `;
@@ -42,7 +42,7 @@
 		data-preserve-grid-selection
 		title={label}
 	>
-		<div class="button-face text-text bg-background cascadia-code">
+		<div class="button-face text-background-lightest bg-{color} cascadia-code">
 			<span class="button-content" aria-hidden="true">
 				{#if children}
 					{@render children()}
@@ -72,7 +72,7 @@
 		title={label}
 		aria-label={label}
 	>
-		<div class="button-face text-text bg-background cascadia-code">
+		<div class="button-face text-background-lightest bg-{color} cascadia-code">
 			<span class="button-content" aria-hidden={children ? 'true' : undefined}>
 				{#if children}
 					{@render children()}
