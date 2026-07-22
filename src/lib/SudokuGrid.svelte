@@ -59,6 +59,16 @@
     const isCellSelected = (row: number, col: number) =>
         gridStateRows[row]?.[col]?.isSelected ?? false;
 
+    const hasRevealedCandidate = (cell: Cell) => {
+        if (revealedNumber === null || cell.fillNumber !== null) return false;
+
+        const candidateIndex = keypadInts.indexOf(revealedNumber);
+        const candidateVisible = cell.candidates[candidateIndex] || cell.manuallyAddedCandidates[candidateIndex];
+        const candidateInvalid = cell.manuallyAddedCandidates[candidateIndex] && !cell.candidates[candidateIndex];
+
+        return candidateVisible && !candidateInvalid && !cell.crossedOutCandidates[candidateIndex];
+    };
+
     const gridPercent = (gridLine: number) => `${(gridLine / 9) * 100}%`;
 
     
@@ -185,6 +195,7 @@
                     class="cell-background"
                     class:selected={cell.isSelected}
                     class:hovered={hoveredCell === cell}
+                    class:candidate-revealed={hasRevealedCandidate(cell)}
                     class:revealed={revealedNumber !== null && cell.fillNumber === revealedNumber}
                     class:conflict={conflictingCells.has(cell)}
                 ></div>
@@ -399,6 +410,10 @@
 
     .cell-background.selected.hovered {
         background-color: var(--color-accent-lighter);
+    }
+
+    .cell-background.candidate-revealed {
+        background-color: var(--color-background-dark);
     }
 
     .cell-background.revealed {

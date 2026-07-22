@@ -107,6 +107,18 @@ test('reveals matching filled digits and uncrossed candidates from the keypad', 
 
 	const revealedCandidate = cells.nth(70).locator('[data-candidate="4"]');
 	await expect(revealedCandidate).toHaveClass(/candidate-revealed/);
+	await expect(backgrounds.nth(70)).toHaveClass(/candidate-revealed/);
+	await expect(backgrounds.nth(70)).toHaveCSS(
+		'background-color',
+		await page.locator('body').evaluate((body) => {
+			const probe = document.createElement('span');
+			probe.style.backgroundColor = 'var(--color-background)';
+			body.append(probe);
+			const color = getComputedStyle(probe).backgroundColor;
+			probe.remove();
+			return color;
+		})
+	);
 	await expect(revealedCandidate.locator('.candidate-text')).toHaveCSS(
 		'background-color',
 		await page.locator('body').evaluate((body) => {
@@ -122,6 +134,7 @@ test('reveals matching filled digits and uncrossed candidates from the keypad', 
 	const crossedCandidate = cells.nth(80).locator('[data-candidate="4"]');
 	await expect(crossedCandidate).toHaveClass(/candidate-crossed-out/);
 	await expect(crossedCandidate).not.toHaveClass(/candidate-revealed/);
+	await expect(backgrounds.nth(80)).not.toHaveClass(/candidate-revealed/);
 });
 
 test('reveals a number from the keyboard without requiring a selected cell', async ({ page }) => {
