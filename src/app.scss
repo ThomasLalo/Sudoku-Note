@@ -1,53 +1,39 @@
 @use 'sass:color';
 
-*, *::before, *::after, input, *:has(input:checked){
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+*,
+*::before,
+*::after,
+input,
+*:has(input:checked) {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
 }
 
-body{
-    background-color: var(--color-background);
+body {
+	background-color: var(--color-background);
 }
 
 html {
-    // font-size: 16px; /* 1rem = 16px */
-    -moz-text-size-adjust: none;
-    -webkit-text-size-adjust: none;
-    text-size-adjust: none;
+	-moz-text-size-adjust: none;
+	-webkit-text-size-adjust: none;
+	text-size-adjust: none;
 }
 
 :root {
-
-
-    // CHANGE THIS
-    --grid-size: 81vh; //prev 81vmin, unused I think
-    --margin-width: 0.5rem; //prev 1vmin, double --diagonal-length in IsometricBorder.svelte 
-    --panel-border-width: 1rem;
-    --button-border-width: 0.5rem;
-    --margin-plus-panel: calc(var(--margin-width) + var(--panel-border-width));
-    --margin-plus-button: calc(var(--margin-width) + var(--button-border-width));
-    --size-font: 1rem;
+	--margin-width: 0.5rem; //prev 1vmin, double --diagonal-length in IsometricBorder.svelte
+	--panel-border-width: 1rem;
+	--button-border-width: 0.5rem;
+	--margin-plus-panel: calc(var(--margin-width) + var(--panel-border-width));
+	--margin-plus-button: calc(var(--margin-width) + var(--button-border-width));
+	--size-font: 1rem;
 }
-
-.pacifico-regular { // unused unused, but in google fonts import for now
-    font-family: "Pacifico", cursive;
-    font-weight: 400;
-    font-style: normal;
-}
-
-.vt323-regular { // unused, but in google fonts import for now
-    font-family: "VT323", monospace;
-    font-weight: 400;
-    font-style: normal;
-}
-
 
 .cascadia-code {
-    font-family: "Cascadia Code", sans-serif;
-    font-optical-sizing: auto;
-    font-weight: 400;
-    font-style: normal;
+	font-family: 'Cascadia Code', sans-serif;
+	font-optical-sizing: auto;
+	font-weight: 400;
+	font-style: normal;
 }
 
 // https://www.realtimecolors.com/dashboard?colors=e2ecfd-020817-7aa7f5-930b2b-ee7e17&fonts=Inter-Inter
@@ -55,19 +41,20 @@ html {
 // Color definitions for light and dark themes
 // these are SASS lists
 $light-colors: (
-    text: hsl(218, 87%, 6%),
-    background: hsl(223, 84%, 95%),
-    primary: hsl(218, 86%, 28%),
-    secondary: hsl(346, 86%, 69%),
-    accent: hsl(29, 86%, 49%)
+	text: hsl(218, 87%, 6%),
+	background: hsl(223, 84%, 95%),
+	primary: hsl(218, 86%, 28%),
+	secondary: hsl(355, 93%, 59%),
+	accent: hsl(29, 86%, 49%)
 );
 
 $dark-colors: (
-    text: hsl(218, 87%, 94%),
-    background: hsl(223, 84%, 5%),
-    primary: hsl(218, 86%, 52%), //primary: hsl(218, 86%, 72%)
-    secondary: hsl(346, 86%, 31%),
-    accent: hsl(29, 86%, 51%)
+	text: hsl(218, 87%, 94%),
+	background: hsl(223, 84%, 5%),
+	primary: hsl(218, 86%, 52%),
+	//primary: hsl(218, 86%, 72%)
+	secondary: hsl(346, 86%, 31%),
+	accent: hsl(29, 86%, 51%)
 );
 
 // LOOP 1: Generate CSS custom properties (the actual color values)
@@ -75,232 +62,240 @@ $dark-colors: (
 // Default to light theme colors in :root, using root is convention, and allows for the variable to be global
 // @each is from SASS
 :root {
-    @each $name, $color in $light-colors {
-        --color-#{$name}: #{$color};                                        // Base color: --color-primary
-        --color-#{$name}-lightest: #{color.mix(white, $color, 95%)};    // Lightest variant: --color-primary-lightest
-        --color-#{$name}-lighter: #{color.mix(white, $color, 50%)}; 
-        --color-#{$name}-light: #{color.scale($color, $lightness: 20%)};    // Light variant: --color-primary-light
-        --color-#{$name}-dark: #{color.scale($color, $lightness: -20%)};    // Dark variant: --color-primary-dark
-        --color-#{$name}-muted: #{color.scale($color, $saturation: -30%)};  // Muted variant: --color-primary-muted
-        --color-#{$name}-grayed: #{color.mix(gray, $color, 50%)};
-        --color-#{$name}-light-static: #{color.scale($color, $lightness: 20%)};    // --color-primary-light-static for isometric things that need the shades to look like lighting
-        --color-#{$name}-dark-static: #{color.scale($color, $lightness: -20%)};    // 
-    }
+	@each $name, $color in $light-colors {
+		--color-#{$name}: #{$color}; // Base color: --color-primary
+		--color-#{$name}-lightest: #{color.mix(
+				white,
+				$color,
+				95%
+			)}; // Lightest variant: --color-primary-lightest
+		--color-#{$name}-lighter: #{color.mix(white, $color, 50%)};
+		--color-#{$name}-light: #{color.scale(
+				$color,
+				$lightness: 20%
+			)}; // Light variant: --color-primary-light
+		--color-#{$name}-dark: #{color.scale(
+				$color,
+				$lightness: -20%
+			)}; // Dark variant: --color-primary-dark
+		--color-#{$name}-muted: #{color.scale(
+				$color,
+				$saturation: -30%
+			)}; // Muted variant: --color-primary-muted
+		--color-#{$name}-grayed: #{color.mix(gray, $color, 50%)};
+		--color-#{$name}-light-static: #{color.scale(
+				$color,
+				$lightness: 20%
+			)}; // --color-primary-light-static for isometric things that need the shades to look like lighting
+		--color-#{$name}-dark-static: #{color.scale($color, $lightness: -20%)}; //
+	}
 }
 
 //this won't work the way I want it to probably, light, lightest probably need to be flipped with dark,darkest.
 //I could just adjust the color.scale without messing with the variable or class names and that would probably be the most painless
-// Override with dark theme colors when data-theme="dark" is set 
-[data-theme="dark"] {
-    @each $name, $color in $dark-colors {
-        --color-#{$name}: #{$color}; // Override base color with dark version
-        --color-#{$name}-lightest: #{color.mix(white, $color, 10%)};    // Lighter variant: --color-primary-lightest
-        --color-#{$name}-lighter: #{color.mix(black, $color, 50%)};
-        --color-#{$name}-light: #{color.scale($color, $lightness: -20%)};    // Override light variant with dark version
-        --color-#{$name}-dark: #{color.scale($color, $lightness: 20%)};    // Override dark variant with dark version
-        --color-#{$name}-muted: #{color.scale($color, $saturation: -30%)};  // Override muted variant with dark version
-        --color-#{$name}-grayed: #{color.mix(gray, $color, 50%)};
-        --color-#{$name}-light-static: #{color.scale($color, $lightness: 20%)};    // Light variant: --color-primary-light
-        --color-#{$name}-dark-static: #{color.scale($color, $lightness: -20%)};    // Dark variant: --color-primary-dark
-    }
+// Override with dark theme colors when data-theme="dark" is set
+[data-theme='dark'] {
+	@each $name, $color in $dark-colors {
+		$base-color: $color;
+		$lightest-color: color.mix(white, $color, 10%);
+
+		// In dark mode, use the slightly lighter surface for the page and
+		// the deepest background color for grids and panels.
+		@if $name == background {
+			$base-color: $lightest-color;
+			$lightest-color: $color;
+		}
+
+		--color-#{$name}: #{$base-color}; // Override base color with dark version
+		--color-#{$name}-lightest: #{$lightest-color};
+		--color-#{$name}-lighter: #{color.mix(black, $color, 50%)};
+		--color-#{$name}-light: #{color.scale(
+				$color,
+				$lightness: -20%
+			)}; // Override light variant with dark version
+		--color-#{$name}-dark: #{color.scale(
+				$color,
+				$lightness: 20%
+			)}; // Override dark variant with dark version
+		--color-#{$name}-muted: #{color.scale(
+				$color,
+				$saturation: -30%
+			)}; // Override muted variant with dark version
+		--color-#{$name}-grayed: #{color.mix(gray, $color, 50%)};
+		--color-#{$name}-light-static: #{color.scale(
+				$color,
+				$lightness: 20%
+			)}; // Light variant: --color-primary-light
+		--color-#{$name}-dark-static: #{color.scale(
+				$color,
+				$lightness: -20%
+			)}; // Dark variant: --color-primary-dark
+	}
 }
 
 // LOOP 2: Generate utility classes that use the CSS custom properties
 // This creates classes like .bg-primary, .text-secondary-light, .border-accent-dark, etc.
 // The classes reference the CSS variables created in Loop 1 using var()
 $property-types: (
-    bg: background-color,      // .bg-* classes
-    text: color,              // .text-* classes  
-    border: border-color      // .border-* classes - this doesn't work?
+	bg: background-color,
+	// .bg-* classes
+	text: color,
+	// .text-* classes
+	border: border-color // .border-* classes - this doesn't work?
 );
 
-$color-variants: ('', '-lightest', '-light', '-dark', '-muted', '-grayed', '-light-static','-dark-static');  // All color variants to generate
+$color-variants: (
+	'',
+	'-lightest',
+	'-light',
+	'-dark',
+	'-muted',
+	'-grayed',
+	'-light-static',
+	'-dark-static'
+); // All color variants to generate
 
-@each $name, $color in $light-colors {                    // Loop through each color name
-    @each $class-prefix, $css-property in $property-types { // Loop through each CSS property type
-        @each $variant in $color-variants {                   // Loop through each color variant
-            .#{$class-prefix}-#{$name}#{$variant} {             // Generate class name: .bg-primary-light
-                #{$css-property}: var(--color-#{$name}#{$variant}); // Use CSS variable: var(--color-primary-light)
-            }
-        }
-    }
+@each $name, $color in $light-colors {
+	// Loop through each color name
+	@each $class-prefix, $css-property in $property-types {
+		// Loop through each CSS property type
+		@each $variant in $color-variants {
+			// Loop through each color variant
+			.#{$class-prefix}-#{$name}#{$variant} {
+				// Generate class name: .bg-primary-light
+				#{$css-property}: var(
+					--color-#{$name}#{$variant}
+				); // Use CSS variable: var(--color-primary-light)
+			}
+		}
+	}
 }
 
-/*
-CSS Custom Properties (CSS Variables) Quick Reference:
-- Declaration: --variable-name: value;
-- Usage: property: var(--variable-name);
-- Scope: Defined in :root for global access, or any selector for local scope
-- Inheritance: Child elements inherit parent's custom properties
-- Fallback: var(--variable-name, fallback-value)
-- JavaScript: Can be read/modified at runtime unlike Sass variables
-Example:
-    :root { --main-color: blue; }
-    .element { color: var(--main-color); }
-*/
+.button-isometric-container {
+	position: relative;
+	border: none;
+	height: var(--box-height);
+	width: var(--box-width);
+	flex-shrink: 0; //stop flexbox in parent from altering height or width
+	display: inline-block; // labels being inline by default adds weird width and height stuff, this had to be changed for the label to be a box
 
-//styles for isometric borders
-    // .isometric-container {
-    //     position: relative;
-    //     height: 100%;
-    //     width: 100%;
-    //     --diagonal-length: 0.45rem;
-    // }
+	background-color: transparent; // I don't understand why I need this. something is setting this to --color-background
 
-    // .face {
-    //     position: absolute;
-    //     height: 100%;
-    //     width: 100%;
-    //     top: 0;
-    //     left: 0;
-    // }
+	// margin-top: var(--button-border-width); // bad idea in practice. the top/bottom left/right just get combined
+	// margin-left: var(--button-border-width);
+	// margin-bottom: calc(var(--button-border-width) * 2);
+	// margin-right: calc(var(--button-border-width) * 2);
+}
 
-    // .right-parallelogram {
-    //     position: absolute;
-    //     width: var(--diagonal-length);
-    //     height: 100%;
-    //     transform: skew(0,45deg);
-    //     transform-origin: left top;
-    //     left: 100%;
-    //     top: 0%;
-    // }
+.button-face {
+	--diagonal-length: var(--button-border-width);
+	--translate-distance: calc(var(--button-border-width) / 3);
 
-    // .bottom-parallelogram {
-    //     position: absolute;
-    //     width: 100%;
-    //     height: var(--diagonal-length);
-    //     transform: skew(45deg);
-    //     transform-origin: left top;
-    //     top: 100%;
-    //     left: 0%;
-    // }
+	position: absolute;
+	top: 0;
+	left: 0;
 
-    .button-isometric-container {
-        position: relative;
-        border: none;
-        height: var(--box-height);
-        width: var(--box-width);
-        flex-shrink: 0; //stop flexbox in parent from altering height or width
-        display: inline-block; // labels being inline by default adds weird width and height stuff, this had to be changed for the label to be a box
+	height: 100%;
+	width: 100%;
+	font-size: var(--size-font);
+	text-align: center;
 
-        background-color: transparent; // I don't understand why I need this. something is setting this to --color-background
+	cursor: pointer;
+	user-select: none;
+	flex-shrink: 0;
+}
 
-        // margin-top: var(--button-border-width); // bad idea in practice. the top/bottom left/right just get combined
-        // margin-left: var(--button-border-width);
-        // margin-bottom: calc(var(--button-border-width) * 2);
-        // margin-right: calc(var(--button-border-width) * 2);
-    }
+.button-face:hover {
+	background-color: var(--highlight-color);
+}
+.button-face input[type='checkbox'],
+.button-face input[type='radio'] {
+	display: none; // this just hides the actual checkbox
+}
 
-    .button-face {
-        --diagonal-length: var(--button-border-width);
-        --translate-distance: calc(var(--button-border-width) / 3);
+.button-face:has(input:checked) {
+	background-color: var(--highlight-color);
+	transform: translate(var(--translate-distance), var(--translate-distance));
+	box-shadow: inset -1px -1px var(--highlight-color);
+}
+.button-face:active {
+	background-color: var(--highlight-color-dark);
+	transform: translate(var(--translate-distance), var(--translate-distance));
+	box-shadow: inset -1px -1px var(--highlight-color-dark);
+}
 
-        position: absolute;
-        top: 0;
-        left: 0;
+.button-face:has(input:checked):hover {
+	background-color: var(--highlight-color-dark);
+	box-shadow: inset -1px -1px var(--highlight-color-dark);
+}
 
-        height: 100%;
-        width: 100%;
-        font-size: var(--size-font);
-        text-align: center;
+// ------------------- right parallelogram - vertical -------------------
+.button-right-parallelogram {
+	background-color: var(--right-color);
 
-        cursor: pointer;
-        user-select: none;
-        flex-shrink: 0;
+	width: var(--diagonal-length);
+	// height:var(--box-height);
+	height: calc(
+		var(--box-height) - 0.5px
+	); // taking off this one pixel fixes minor rendering artifacts from showing up sometimes
 
-    }
+	position: absolute;
+	left: 100%;
+	top: 0%;
 
-    .button-face:hover {
-        background-color: var(--highlight-color);
-    }
-    .button-face input[type="checkbox"],
-    .button-face input[type="radio"] {
-        display: none; // this just hides the actual checkbox
-    }
+	// transform: skew(0,45deg) translate(0, -0.5px); // without the 0 it just skews the x axis, adding in the 0 lets me skew the y-axis
+	transform: skew(0, 45deg);
+	transform-origin: left top;
+	box-shadow: inset 1px 0px var(--right-color); // fixes gap between rectangles caused by anti-aliasing
 
+	pointer-events: none; // the border shouldn't be clickable
+}
 
-    .button-face:has(input:checked){
-        background-color: var(--highlight-color);
-        transform: translate(var(--translate-distance), var(--translate-distance)); 
-        box-shadow: inset -1px -1px var(--highlight-color);
-    }
-    .button-face:active {
-        background-color: var(--highlight-color-dark);
-        transform: translate(var(--translate-distance), var(--translate-distance));
-        box-shadow: inset -1px -1px var(--highlight-color-dark);
-    }
+.button-face:has(input:checked) .button-right-parallelogram,
+.button-face:active .button-right-parallelogram {
+	width: calc(var(--diagonal-length) - var(--translate-distance));
+	transform-origin: left top;
+	transform: skew(0, 45deg);
+}
 
-    .button-face:has(input:checked):hover {
-        background-color: var(--highlight-color-dark);
-        box-shadow: inset -1px -1px var(--highlight-color-dark);
-    }
+//  ------------------- bottom parallelogram - horizontal  -------------------
+.button-bottom-parallelogram {
+	background-color: var(--bottom-color);
 
+	width: var(--box-width);
+	height: var(--diagonal-length);
 
-    // ------------------- right parallelogram - vertical ------------------- 
-    .button-right-parallelogram {
-        background-color: var(--right-color);
+	position: absolute;
+	top: 100%;
 
-        width: var(--diagonal-length);
-        // height:var(--box-height);
-        height:calc( var(--box-height) - 0.5px); // taking off this one pixel fixes minor rendering artifacts from showing up sometimes
+	transform: skew(45deg);
 
-        position: absolute;
-        left: 100%;
-        top: 0%;
+	transform-origin: left top;
+	box-shadow: inset 0px 1px var(--bottom-color); // looks like there is a subpixel line between the face and bottom that this does not fix
 
-        // transform: skew(0,45deg) translate(0, -0.5px); // without the 0 it just skews the x axis, adding in the 0 lets me skew the y-axis
-        transform: skew(0,45deg);
-        transform-origin: left top;
-        box-shadow: inset 1px 0px var(--right-color); // fixes gap between rectangles caused by anti-aliasing
+	pointer-events: none;
+}
 
-        pointer-events: none; // the border shouldn't be clickable
-    }
+.button-face:has(input:checked) .button-bottom-parallelogram,
+.button-face:active .button-bottom-parallelogram {
+	height: calc(var(--diagonal-length) - var(--translate-distance));
+	width: calc(var(--box-width) + 0px);
+	transform-origin: left top;
+	transform: skew(45deg);
+}
 
-    .button-face:has(input:checked) .button-right-parallelogram,
-    .button-face:active .button-right-parallelogram {
-        width: calc( var(--diagonal-length) - var(--translate-distance));
-        transform-origin: left top;
-        transform:  skew(0,45deg);
-    }
+//  ------------------- Corner square  -------------------
+.button-corner-square {
+	position: absolute;
+	top: 100%;
+	left: 100%;
+	height: calc(var(--diagonal-length) - 1px); // the edges are visible without the -1s
+	width: calc(var(--diagonal-length) - 1px);
+	background-color: var(--right-color);
+}
 
-    //  ------------------- bottom parallelogram - horizontal  ------------------- 
-    .button-bottom-parallelogram {
-        background-color: var(--bottom-color);
-
-        width: var(--box-width);
-        height: var(--diagonal-length);
-
-        position: absolute;
-        top: 100%;
-
-        transform: skew(45deg);
-
-        transform-origin: left top;
-        box-shadow: inset 0px 1px var(--bottom-color); // looks like there is a subpixel line between the face and bottom that this does not fix
-
-        pointer-events: none;
-    }
-
-    .button-face:has(input:checked) .button-bottom-parallelogram,
-    .button-face:active .button-bottom-parallelogram {        
-        height: calc( var(--diagonal-length) - var(--translate-distance));
-        width: calc( var(--box-width) + 0px);
-        transform-origin: left top;
-        transform: skew(45deg);
-    }
-
-    //  ------------------- Corner square  ------------------- 
-    .button-corner-square {
-        position: absolute;
-        top:100%;
-        left: 100%;
-        height: calc( var(--diagonal-length) - 1px); // the edges are visible without the -1s
-        width: calc( var(--diagonal-length) - 1px);
-        background-color: var(--right-color);
-    }
-
-    .button-face:has(input:checked) .button-corner-square,
-    .button-face:active .button-corner-square {        
-        height: calc( var(--diagonal-length) - var(--translate-distance) - 1px);
-        width: calc( var(--diagonal-length) - var(--translate-distance) - 1px);
-    }
+.button-face:has(input:checked) .button-corner-square,
+.button-face:active .button-corner-square {
+	height: calc(var(--diagonal-length) - var(--translate-distance) - 1px);
+	width: calc(var(--diagonal-length) - var(--translate-distance) - 1px);
+}

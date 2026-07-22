@@ -1,117 +1,137 @@
 <script lang="ts">
     import type { Cell } from "./gridUtils";
     import { getAdjacentCell } from "./gridUtils";
-    import { untrack } from "svelte";
     const keypadInts = [7,8,9,4,5,6,1,2,3];
-    const invertedKeypadInts = [1,2,3,4,5,6,7,8,9];
+    const flippedInts = [1,2,3,4,5,6,7,8,9];
+    const innerGridLines = [1,2,3,4,5,6,7,8];
+    const cellSpan = `${100 / 9}%`;
 
-    let {gridState = $bindable(), selectedCells = $bindable(), lastSelected = $bindable(), fillCell}:
-    {gridState: Cell[][], selectedCells: Cell[], lastSelected: Cell, fillCell: (targetCell:Cell, fillValue:number) => void} = $props();
+    let {gridState = $bindable(), gridStateRows = $bindable(), selectedCells = $bindable(), lastSelected = $bindable(), flippedNotes, revealedNumber, handleNumberInput, clearCells}:
+    {gridState: Cell[][], gridStateRows: Cell[][], selectedCells: Cell[], lastSelected: Cell, flippedNotes: boolean, revealedNumber: number | null, handleNumberInput: (value:number) => void, clearCells: (targetCells:Cell[]) => void} = $props();
 
-    let dragSelecting:boolean = $state(false); // idk if I need to move this to App
+    let candidateInts = $derived(flippedNotes ? flippedInts : keypadInts);
 
+    let conflictingCells = $derived.by(() => {
+        const conflicts = new Set<Cell>();
+        const columns = gridStateRows[0].map((_, colIndex) =>
+            gridStateRows.map((row) => row[colIndex])
+        );
+        const groups = [...gridStateRows, ...columns, ...gridState];
 
-    const cellBorders = [
-        ['border-bottom','border-right'], // 0 
-        ['border-bottom','border-right'], // 1 
-        ['border-bottom'], // 2
-        ['border-bottom','border-right'], // 3
-        ['border-bottom','border-right'], // 4
-        ['border-bottom'], // 5
-        ['border-right'], // 6
-        ['border-right'], // 7
-        [] // 8
-    ];
-    const boxBorders = [
-        ['border-top', 'border-left', 'border-bottom', 'border-right'], // 0
-        ['border-top', 'border-bottom', 'border-right'], // 1
-        ['border-top', 'border-bottom', 'border-right'], // 2
-        ['border-left', 'border-bottom', 'border-right'], // 3
-        ['border-bottom', 'border-right'], // 4
-        ['border-bottom', 'border-right'], // 5
-        ['border-left', 'border-bottom', 'border-right'], // 6
-        ['border-bottom', 'border-right'], // 7
-        ['border-bottom', 'border-right'] // 8
-    ];
+        for (const group of groups) {
+            const cellsByValue = new Map<number, Cell[]>();
+            for (const cell of group) {
+                if (cell.fillNumber === null) continue;
+                const matchingCells = cellsByValue.get(cell.fillNumber) ?? [];
+                matchingCells.push(cell);
+                cellsByValue.set(cell.fillNumber, matchingCells);
+            }
 
-    function addBorders(borderColor : string, borderVar:string, elementType: string, elementNumber: number, targetBoxIndex?: number, targetCellIndex?:number): string {
-        let borderPositions:string[][] = [];
-        if (elementType === "cell") {
-            const targetCell = gridState[targetBoxIndex!][targetCellIndex!]; // the if means its always exists
-            borderPositions = cellBorders;
-
-            // immutability is the source of all my frustration with programming. pure js would be less annoying at this point, then I wouldn't have to deal with these stupid conventions.
-            // there is a zero percent chance I remake this with react
-            // these values will never change, I just need them to be set and accessible from Cell objects in the gridState structure
-            // if they never change then nothing needs to react to them changing and so they don't need to be tracked. 
-            untrack( () => {
-                if (borderPositions[elementNumber].includes("border-bottom")) {
-                    targetCell.ownsBottomBorder = true; 
+            for (const matchingCells of cellsByValue.values()) {
+                if (matchingCells.length > 1) {
+                    matchingCells.forEach((cell) => conflicts.add(cell));
                 }
-
-                if (borderPositions[elementNumber].includes("border-right")) {
-                    targetCell.ownsRightBorder = true;            
-                }
-            });
-        }
-
-        if (elementType === "box") {
-            borderPositions = boxBorders;
-        }
-
-            let returnString: string = "";
-        for (let borderString of borderPositions[elementNumber]) {
-            if (borderString !== '') {
-                returnString += borderString + ": "+borderVar+" solid var(" + borderColor + "); "
             }
         }
-        return returnString;
-    };
 
+		for (const cell of gridStateRows.flat()) {
+			for (const [candidateIndex, manuallyAdded] of cell.manuallyAddedCandidates.entries()) {
+				if (!manuallyAdded || cell.candidates[candidateIndex]) continue;
+				const candidate = keypadInts[candidateIndex];
+				const seenCells = new Set([
+					...gridState[cell.boxNumber - 1],
+					...gridStateRows[cell.rowNumber0based],
+					...columns[cell.colNumber0based]
+				]);
+				for (const seenCell of seenCells) {
+					if (seenCell.fillNumber === candidate) conflicts.add(seenCell);
+				}
+			}
+		}
 
-    function selectCell(box:number,cell:number) { // this needs work
-        const cellObj = gridState[box][cell];
-        const isSelected = selectedCells.includes(cellObj);
+        return conflicts;
+    });
 
-        if (isSelected && !dragSelecting) { 
-            selectedCells = selectedCells.filter(value => value !== cellObj);
-        } else if (!isSelected) {
-            selectedCells.push(cellObj);
-            lastSelected = cellObj;
+    let dragAdding = false;
+    let dragRemoving = false;
+    let hoveredCell: Cell | null = $state(null);
+
+    const isCellSelected = (row: number, col: number) =>
+        gridStateRows[row]?.[col]?.isSelected ?? false;
+
+    const gridPercent = (gridLine: number) => `${(gridLine / 9) * 100}%`;
+
+    
+
+    function clearSelection() {
+        for (let cellObj of selectedCells) {
+            cellObj.isSelected = false;
         }
-        // console.log("current selection:")
-        // for (let sCell of selectedCells) {
-        //     console.log("box:" + sCell.boxNumber.toString() + ","+ "cell:"+ sCell.positionInBox.toString() )
-        // }
-        // console.log("\n")
-    }
-
-    function handleMouseDown(boxNumber:number, cellNumber:number) {
         selectedCells = [];
-        dragSelecting = true;
-        selectCell(boxNumber,cellNumber);
     }
-    function handleMouseEnter(boxNumber:number, cellNumber:number) {
-        if (dragSelecting) {
-            selectCell(boxNumber,cellNumber);
+
+    function addToSelection(box:number,cell:number) {
+        const cellObj = gridState[box][cell];
+        cellObj.isSelected = true;
+        selectedCells.push(cellObj);
+        lastSelected = cellObj;
+    }
+
+    function removeFromSelection(box:number,cell:number) {
+        const cellObj = gridState[box][cell];
+        cellObj.isSelected = false;
+        selectedCells = selectedCells.filter(value => value !== cellObj);
+    }
+
+    function handleMouseDown(event:MouseEvent, boxNumber:number, cellNumber:number) {
+        const cellObj = gridState[boxNumber][cellNumber];
+        if (!event.shiftKey) {
+            clearSelection();
+        }
+        if (cellObj.isSelected) {
+            dragRemoving = true;
+            removeFromSelection(boxNumber,cellNumber);
+        } else {
+            dragAdding = true;
+            addToSelection(boxNumber,cellNumber);
         }
     }
+
+    function handleMouseEnter(boxNumber:number, cellNumber:number) {
+        hoveredCell = gridState[boxNumber][cellNumber];
+        if (dragAdding) {
+            addToSelection(boxNumber,cellNumber);
+        }
+        if (dragRemoving) {
+            removeFromSelection(boxNumber,cellNumber);
+        }
+    }
+
+    function handleMouseLeave(cell: Cell) {
+        if (hoveredCell === cell) hoveredCell = null;
+    }
+
     function handleMouseUp() {
-        dragSelecting = false;
+        dragAdding = false;
+        dragRemoving = false;
+        
     }
 
     function handleGlobalMouseUp() {
-        dragSelecting = false;
+        dragAdding = false;
+        dragRemoving = false;
     }
 
     let gridElement: HTMLDivElement | undefined; // grid element might be undefined when the page first loads. see the bind:this on sudoku-grid in the html
     function handleGlobalMouseDown(event:MouseEvent) {
-        // DOM arcana. event.target doesn't have to be a DOM node. as Node tells typescript it will be a Node, and elements are Nodes
-        // gridElement? ensures .contains() won't try to run on an undefined and throw an error
-        if (gridElement?.contains(event.target as Node)) {
+        const target = event.target;
+        if (target instanceof Node && gridElement?.contains(target)) {
             return;
         }
-        selectedCells = [];
+        if (target instanceof Element && target.closest('[data-preserve-grid-selection]')) {
+            return;
+        }
+        clearSelection();
     }
 
 
@@ -127,29 +147,29 @@
                 
                 if (!event.shiftKey) { 
                     //only select multiple cells if shift is held down
-                    selectedCells = [];
+                    clearSelection();
                 }
-                selectCell(newBox,newCellPos);
+                // selectCell(newBox,newCellPos);
+                addToSelection(newBox,newCellPos);
 
             } else { 
                 // if nothing is selected then select the cell last previously selected
-                selectCell(lastSelected.boxNumber -1,lastSelected.positionInBox -1);
+                // selectCell(lastSelected.boxNumber -1,lastSelected.positionInBox -1);
+                addToSelection(lastSelected.boxNumber -1,lastSelected.positionInBox -1);
             }
         }
 
-        if (['1','2','3','4','5','6','7','8','9'].includes(event.key) && selectedCells.length === 1) {
-            // selectedCells[0].fillNumber = Number(event.key);
-            fillCell(selectedCells[0], Number(event.key));
+        if (['1','2','3','4','5','6','7','8','9'].includes(event.key)) {
+            handleNumberInput(Number(event.key));
         }
 
         if (['Backspace','Delete'].includes(event.key)) {
-            for (const cell of selectedCells) {
-                cell.fillNumber = null; // this needs to be a function to reset candidates
-            }
+            event.preventDefault();
+            clearCells(selectedCells);
         }
 
         if (event.key === "Escape") {
-            selectedCells = []; 
+            clearSelection();
         }
     }
 
@@ -158,86 +178,338 @@
 <svelte:window onmouseup={handleGlobalMouseUp} onmousedown={handleGlobalMouseDown} onkeydown={handleGlobalKeyDown}/>
 
 <div class="sudoku-grid" bind:this={gridElement}>
+    <div class="grid-layer cell-background-layer" aria-hidden="true">
+        {#each gridStateRows as row}
+            {#each row as cell (cell.boxNumber + "-" + cell.positionInBox)}
+                <div
+                    class="cell-background"
+                    class:selected={cell.isSelected}
+                    class:hovered={hoveredCell === cell}
+                    class:revealed={revealedNumber !== null && cell.fillNumber === revealedNumber}
+                    class:conflict={conflictingCells.has(cell)}
+                ></div>
+            {/each}
+        {/each}
+    </div>
 
-    {#each {length:9}, boxNumber }
-        <div class="sudoku-box border-primary" style="{addBorders("--color-primary-light", "var(--box-border-size)", "box", boxNumber)}">
+    <!-- Variant graphics such as arrows and whisper lines will live here. -->
+    <svg class="grid-layer variant-layer" viewBox="0 0 9 9" preserveAspectRatio="none" aria-hidden="true"></svg>
 
-            {#each {length:9}, cellNumber }
-                <!-- {selectedCells.some(object => object.boxNumber === boxNumber + 1 && object.positionInBox === cellNumber + 1) ? "selected" : "" }" 
-                this adds the selected utility class if this cell is in selected cells, by comparing the each block variables to cell object values-->
-                <div 
-                    class="sudoku-cell bg-background-lightest border-text-grayed
-                        {selectedCells.some(object => object.boxNumber === boxNumber + 1 && object.positionInBox === cellNumber + 1) ? "selected" : "" }" 
+    <svg class="grid-layer selection-layer" aria-hidden="true">
+        {#each gridStateRows as row}
+            {#each row as cell (cell.boxNumber + "-" + cell.positionInBox)}
+                {@const cellRow = cell.rowNumber0based}
+                {@const cellCol = cell.colNumber0based}
+                {@const cellLeft = gridPercent(cellCol)}
+                {@const cellTop = gridPercent(cellRow)}
+                {@const cellRight = gridPercent(cellCol + 1)}
+                {@const cellBottom = gridPercent(cellRow + 1)}
+                {#if cell.isSelected}
+                    {#if !isCellSelected(cellRow - 1, cellCol)}
+                        <rect
+                            class="selection-segment horizontal"
+                            class:box-y={cellRow % 3 === 0}
+                            data-selection-side="top"
+                            data-row={cellRow}
+                            data-col={cellCol}
+                            x={cellLeft}
+                            y={cellTop}
+                            width={cellSpan}
+                        ></rect>
+                    {/if}
+                    {#if !isCellSelected(cellRow, cellCol + 1)}
+                        <rect
+                            class="selection-segment vertical shift-left"
+                            class:box-x={(cellCol + 1) % 3 === 0}
+                            data-selection-side="right"
+                            data-row={cellRow}
+                            data-col={cellCol}
+                            x={cellRight}
+                            y={cellTop}
+                            height={cellSpan}
+                        ></rect>
+                    {/if}
+                    {#if !isCellSelected(cellRow + 1, cellCol)}
+                        <rect
+                            class="selection-segment horizontal shift-up"
+                            class:box-y={(cellRow + 1) % 3 === 0}
+                            data-selection-side="bottom"
+                            data-row={cellRow}
+                            data-col={cellCol}
+                            x={cellLeft}
+                            y={cellBottom}
+                            width={cellSpan}
+                        ></rect>
+                    {/if}
+                    {#if !isCellSelected(cellRow, cellCol - 1)}
+                        <rect
+                            class="selection-segment vertical"
+                            class:box-x={cellCol % 3 === 0}
+                            data-selection-side="left"
+                            data-row={cellRow}
+                            data-col={cellCol}
+                            x={cellLeft}
+                            y={cellTop}
+                            height={cellSpan}
+                        ></rect>
+                    {/if}
 
-                    style="{addBorders("--color-text-grayed", "var(--cell-border-size)", "cell", cellNumber, boxNumber, cellNumber)}" 
-                    onmousedown={() => handleMouseDown(boxNumber,cellNumber)} 
-                    onmouseenter={() => handleMouseEnter(boxNumber,cellNumber)}
+                    {#if isCellSelected(cellRow - 1, cellCol) && isCellSelected(cellRow, cellCol - 1) && !isCellSelected(cellRow - 1, cellCol - 1)}
+                        <rect
+                            class="selection-corner"
+                            class:box-x={cellCol % 3 === 0}
+                            class:box-y={cellRow % 3 === 0}
+                            x={cellLeft}
+                            y={cellTop}
+                        ></rect>
+                    {/if}
+                    {#if isCellSelected(cellRow - 1, cellCol) && isCellSelected(cellRow, cellCol + 1) && !isCellSelected(cellRow - 1, cellCol + 1)}
+                        <rect
+                            class="selection-corner shift-left"
+                            class:box-x={(cellCol + 1) % 3 === 0}
+                            class:box-y={cellRow % 3 === 0}
+                            x={cellRight}
+                            y={cellTop}
+                        ></rect>
+                    {/if}
+                    {#if isCellSelected(cellRow + 1, cellCol) && isCellSelected(cellRow, cellCol - 1) && !isCellSelected(cellRow + 1, cellCol - 1)}
+                        <rect
+                            class="selection-corner shift-up"
+                            class:box-x={cellCol % 3 === 0}
+                            class:box-y={(cellRow + 1) % 3 === 0}
+                            x={cellLeft}
+                            y={cellBottom}
+                        ></rect>
+                    {/if}
+                    {#if isCellSelected(cellRow + 1, cellCol) && isCellSelected(cellRow, cellCol + 1) && !isCellSelected(cellRow + 1, cellCol + 1)}
+                        <rect
+                            class="selection-corner shift-left shift-up"
+                            class:box-x={(cellCol + 1) % 3 === 0}
+                            class:box-y={(cellRow + 1) % 3 === 0}
+                            x={cellRight}
+                            y={cellBottom}
+                        ></rect>
+                    {/if}
+                {/if}
+            {/each}
+        {/each}
+    </svg>
+
+    <svg class="grid-layer grid-line-layer" viewBox="0 0 9 9" preserveAspectRatio="none" aria-hidden="true">
+        {#each innerGridLines as line}
+            <line class="grid-line" class:box-line={line % 3 === 0} x1={line} y1="0" x2={line} y2="9"></line>
+            <line class="grid-line" class:box-line={line % 3 === 0} x1="0" y1={line} x2="9" y2={line}></line>
+        {/each}
+        <rect class="outer-grid-border" x="0" y="0" width="9" height="9"></rect>
+    </svg>
+
+    <div class="grid-layer cell-content-layer">
+        {#each gridStateRows as row}
+            {#each row as cell (cell.boxNumber + "-" + cell.positionInBox)}
+                <!-- Keyboard interaction uses the grid's selection state through the window keydown handler. -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div
+                    class="sudoku-cell"
+                    onmousedown={(event) => handleMouseDown(event, cell.boxNumber - 1, cell.positionInBox - 1)}
+                    onmouseenter={() => handleMouseEnter(cell.boxNumber - 1, cell.positionInBox - 1)}
+                    onmouseleave={() => handleMouseLeave(cell)}
                     onmouseup={handleMouseUp}
-                    role="button"
-                    tabindex="0"
-                > <!-- I'm not sure about using tabindex like that, but it makes the warning go away. there might be a better way, but I'll figure that out later -->
-
-                    {#if gridState[boxNumber][cellNumber].fillNumber !== null}
+                    bind:this={cell.element}
+                    bind:clientWidth={cell.width}
+                    bind:clientHeight={cell.height}
+                >
+                    {#if cell.fillNumber !== null}
                         <div class="value-container">
-                            <span class="value text-text cascadia-code">{gridState[boxNumber][cellNumber].fillNumber}</span>
+                            <span
+                                class="value text-text cascadia-code"
+                                class:value-revealed={revealedNumber !== null && cell.fillNumber === revealedNumber}
+                                class:value-conflict={conflictingCells.has(cell)}
+                            >{cell.fillNumber}</span>
                         </div>
-                        
                     {:else}
                         <div class="candidate-grid">
-                            {#each keypadInts as num, index}
-                                {#if gridState[boxNumber][cellNumber].candidates[index]}
-                                    <!-- so when a candidate is false, the grid layout reorder which is default css grid behavior 
-                                    I could fix this by adding grid-areas though -->
-                                    <span class="candidate text-text-grayed cascadia-code"> {num} </span> 
-                                {/if}
+                            {#each candidateInts as num}
+								{@const candidateIndex = keypadInts.indexOf(num)}
+								{@const candidateVisible = cell.candidates[candidateIndex] || cell.manuallyAddedCandidates[candidateIndex]}
+								{@const candidateInvalid = cell.manuallyAddedCandidates[candidateIndex] && !cell.candidates[candidateIndex]}
+                                <span
+                                    class="candidate text-text-grayed cascadia-code"
+									class:candidate-hidden={!candidateVisible}
+									class:candidate-crossed-out={cell.crossedOutCandidates[candidateIndex]}
+									class:candidate-bold={cell.boldCandidates[candidateIndex]}
+									class:candidate-invalid={candidateInvalid}
+									class:candidate-revealed={num === revealedNumber && candidateVisible && !candidateInvalid && !cell.crossedOutCandidates[candidateIndex]}
+									aria-hidden={!candidateVisible}
+                                    data-candidate={num}
+                                ><span class="candidate-text">{num}</span></span>
                             {/each}
                         </div>
                     {/if}
-
                 </div>
             {/each}
-
-        </div>
-    {/each}
-
+        {/each}
+    </div>
 </div>
-
 
 
 <style lang="scss">    
     .sudoku-grid {
-        --cell-border-size: 0.15rem;
-        --box-border-size: 0.3rem;
+        position: relative;
+        isolation: isolate;
+        --cell-border-size: 2px;
+        --half-cell-border-size: 1px;
+        --box-border-size: 5px;
+        --half-box-border-size: 2.5px;
+        --selection-visible-size: 4px;
+        --cell-selection-depth: calc(var(--selection-visible-size) + var(--half-cell-border-size));
+        --box-selection-depth: calc(var(--selection-visible-size) + var(--half-box-border-size));
         width: 100%;
         height: 100%;
-        display: grid;
-        grid-template: 1fr 1fr 1fr / 1fr 1fr 1fr;
+        background-color: var(--color-background-lightest);
     }
 
-    .sudoku-box {
+    .grid-layer {
+        position: absolute;
+        top: var(--half-box-border-size);
+        left: var(--half-box-border-size);
+        width: calc(100% - var(--box-border-size));
+        height: calc(100% - var(--box-border-size));
+    }
+
+    .cell-background-layer,
+    .cell-content-layer {
         display: grid;
-        grid-template: 1fr 1fr 1fr / 1fr 1fr 1fr;
+        grid-template: repeat(9, 1fr) / repeat(9, 1fr);
+    }
+
+    .cell-background-layer {
+        z-index: 0;
+    }
+
+    .cell-background {
+        min-width: 0;
+        min-height: 0;
+        background-color: var(--color-background-lightest);
+    }
+
+    .cell-background.selected,
+    .cell-background.hovered {
+        background-color: var(--color-background);
+    }
+
+    .cell-background.selected.hovered {
+        background-color: var(--color-accent-lighter);
+    }
+
+    .cell-background.revealed {
+        background-color: var(--color-primary);
+    }
+
+    .cell-background.conflict {
+        background-color: var(--color-secondary);
+    }
+
+    .variant-layer {
+        z-index: 10;
+    }
+
+    .selection-layer {
+        z-index: 20;
+    }
+
+    .selection-segment,
+    .selection-corner {
+        fill: var(--color-accent);
+        shape-rendering: crispEdges;
+    }
+
+    .selection-segment.horizontal {
+        height: var(--cell-selection-depth);
+    }
+
+    .selection-segment.horizontal.box-y {
+        height: var(--box-selection-depth);
+    }
+
+    .selection-segment.vertical {
+        width: var(--cell-selection-depth);
+    }
+
+    .selection-segment.vertical.box-x {
+        width: var(--box-selection-depth);
+    }
+
+    .selection-corner {
+        width: var(--cell-selection-depth);
+        height: var(--cell-selection-depth);
+    }
+
+    .selection-corner.box-x {
+        width: var(--box-selection-depth);
+    }
+
+    .selection-corner.box-y {
+        height: var(--box-selection-depth);
+    }
+
+    .shift-left,
+    .shift-up {
+        transform-box: fill-box;
+    }
+
+    .shift-left {
+        transform: translateX(-100%);
+    }
+
+    .shift-up {
+        transform: translateY(-100%);
+    }
+
+    .shift-left.shift-up {
+        transform: translate(-100%, -100%);
+    }
+
+    .grid-line-layer {
+        z-index: 30;
+        overflow: visible;
+    }
+
+    .variant-layer,
+    .selection-layer,
+    .grid-line-layer {
+        pointer-events: none;
+    }
+
+    .grid-line {
+        stroke: var(--color-text-grayed);
+        stroke-width: var(--cell-border-size);
+        vector-effect: non-scaling-stroke;
+        shape-rendering: crispEdges;
+    }
+
+    .grid-line.box-line {
+        stroke: var(--color-primary-light);
+        stroke-width: var(--box-border-size);
+    }
+
+    .outer-grid-border {
+        fill: none;
+        stroke: var(--color-primary-light);
+        stroke-width: var(--box-border-size);
+        stroke-linejoin: miter;
+        vector-effect: non-scaling-stroke;
+        shape-rendering: crispEdges;
+    }
+
+    .cell-content-layer {
+        z-index: 40;
     }
 
     .sudoku-cell {
+        min-width: 0;
+        min-height: 0;
+        background-color: transparent;
         user-select: none;
-    }
-
-    .sudoku-cell:hover {
-        background-color: var(--color-background);
-    }
-
-    .selected {
-        background-color: var(--color-background);
-        border: 0.2rem solid var(--color-accent) !important;
-    //     box-shadow: 
-    //         inset 0 0.2rem var(--color-accent), //top
-    //         inset 0 -0.2rem var(--color-accent), //bottom
-    //         inset 0.2rem 0 var(--color-accent), //left
-    //         inset -0.2rem 0 var(--color-accent); //right
-    }
-    .selected:hover {
-        background-color: var(--color-accent-lighter);
     }
 
     .value-container {
@@ -251,6 +523,14 @@
         font-size: 4rem;
     }
 
+    .value-revealed {
+        color: var(--color-background-lightest);
+    }
+
+    .value-conflict {
+        color: var(--color-background-lightest);
+    }
+
     .candidate-grid {
         width: 100%;
         height: 100%;
@@ -258,16 +538,72 @@
         grid-template: 1fr 1fr 1fr / 1fr 1fr 1fr;
     }
     .candidate {
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
     }
 
+    .candidate-crossed-out {
+        opacity: 0.45;
+    }
+
+    .candidate-crossed-out::after {
+        content: '';
+        position: absolute;
+        z-index: 1;
+        top: 50%;
+        left: 50%;
+        width: 65%;
+        border-top: 0.1rem solid var(--color-secondary-muted);
+        transform: translate(-50%, -50%) rotate(35deg);
+        pointer-events: none;
+    }
+
+    .candidate-bold {
+        color: var(--color-accent);
+        font-weight: bold;
+    }
+
+    .candidate-bold.candidate-crossed-out {
+        color: var(--color-text-grayed);
+        font-weight: 400;
+    }
+
+    .candidate-revealed .candidate-text {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.25em;
+        min-height: 1.25em;
+        padding: 0.05em;
+        color: var(--color-background-lightest);
+        background-color: var(--color-primary);
+        box-sizing: border-box;
+    }
+
+	.candidate-invalid .candidate-text {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 1.25em;
+		min-height: 1.25em;
+		padding: 0.05em;
+		color: var(--color-background-lightest);
+		background-color: var(--color-secondary);
+		box-sizing: border-box;
+	}
+
+    .candidate-hidden {
+        visibility: hidden;
+    }
+
     @media(max-width: 450px) or (max-height:680px) {
         .sudoku-grid {
             --cell-border-size: 0.1rem;
+            --half-cell-border-size: 0.05rem;
             --box-border-size: 0.2rem;
+            --half-box-border-size: 0.1rem;
         }
-
-}
+    }
 </style>
