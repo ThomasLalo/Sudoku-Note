@@ -102,6 +102,11 @@
 			for (const cell of selectedCells) {
 				cell.crossedOutCandidates[candidateIndex] = true;
 			}
+		} else if (keypadMode === 'Bold candidate') {
+			const candidateIndex = keypadInts.indexOf(fillValue);
+			for (const cell of selectedCells) {
+				cell.boldCandidates[candidateIndex] = true;
+			}
 		}
 	}
 

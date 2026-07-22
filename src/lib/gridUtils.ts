@@ -5,6 +5,7 @@ export interface Cell {
     fillNumber: number | null;
     candidates: boolean[];
     crossedOutCandidates: boolean[];
+    boldCandidates: boolean[];
 
     rowNumber1based: number;
     colNumber1based: number;
@@ -78,6 +79,7 @@ export function initializeGrid(){
                 positionInBox:cellPos + 1,
                 candidates:[true,true,true,true,true,true,true,true,true],
                 crossedOutCandidates:[false,false,false,false,false,false,false,false,false],
+                boldCandidates:[false,false,false,false,false,false,false,false,false],
                 fillNumber: null,
                 rowNumber1based:oneBasedLookUpTable[boxNum][cellPos][0],
                 rowNumber0based:oneBasedLookUpTable[boxNum][cellPos][0] - 1,

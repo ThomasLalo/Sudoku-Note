@@ -168,6 +168,88 @@ test('crosses out candidates from the keyboard without filling selected cells', 
 	await expect(cell.locator('[data-candidate="7"]')).toHaveClass(/candidate-crossed-out/);
 });
 
+test('bolds a candidate in every selected cell from the keypad', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+	const cells = page.locator('.sudoku-cell');
+
+	await cells.nth(0).click();
+	await cells.nth(1).click({ modifiers: ['Shift'] });
+	await page.locator('.keypad label[title="Bold candidate"]').click();
+	await expect(page.getByLabel('Bold candidate')).toBeChecked();
+	await page.getByRole('button', { name: '4' }).click();
+
+	for (const cellIndex of [0, 1]) {
+		const candidate = cells.nth(cellIndex).locator('[data-candidate="4"]');
+		await expect(candidate).toHaveClass(/candidate-bold/);
+		await expect(candidate).toHaveCSS('font-weight', '700');
+		expect(
+			await candidate.evaluate((element) => {
+				const accentColorProbe = document.createElement('span');
+				accentColorProbe.style.color = 'var(--color-accent)';
+				document.body.append(accentColorProbe);
+				const usesAccentColor =
+					getComputedStyle(element).color === getComputedStyle(accentColorProbe).color;
+				accentColorProbe.remove();
+				return usesAccentColor;
+			})
+		).toBe(true);
+	}
+});
+
+test('bolds candidates from the keyboard without filling selected cells', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+	const cell = page.locator('.sudoku-cell').first();
+
+	await cell.click();
+	await page.locator('.keypad label[title="Bold candidate"]').click();
+	await page.keyboard.press('7');
+
+	await expect(cell.locator('[data-candidate="7"]')).toHaveClass(/candidate-bold/);
+	await expect(cell.locator('.value')).toHaveCount(0);
+});
+
+test('renders crossed-out bold candidates like regular crossed-out candidates', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cells = page.locator('.sudoku-cell');
+	await cells.nth(0).click();
+	await page.locator('.keypad label[title="Bold candidate"]').click();
+	await page.getByRole('button', { name: '2', exact: true }).click();
+	await page.locator('.keypad label[title="Crossout candidate"]').click();
+	await page.getByRole('button', { name: '2', exact: true }).click();
+
+	await cells.nth(1).click();
+	await page.getByRole('button', { name: '2', exact: true }).click();
+
+	const boldCrossout = cells.nth(0).locator('[data-candidate="2"]');
+	const regularCrossout = cells.nth(1).locator('[data-candidate="2"]');
+	await expect(boldCrossout).toHaveClass(/candidate-bold/);
+	await expect(boldCrossout).toHaveClass(/candidate-crossed-out/);
+
+	const styles = await Promise.all(
+		[boldCrossout, regularCrossout].map((candidate) =>
+			candidate.evaluate((element) => {
+				const text = getComputedStyle(element);
+				const strike = getComputedStyle(element, '::after');
+				return {
+					color: text.color,
+					fontWeight: text.fontWeight,
+					opacity: text.opacity,
+					strikeColor: strike.borderTopColor,
+					strikeWidth: strike.borderTopWidth
+				};
+			})
+		)
+	);
+	expect(styles[0]).toEqual(styles[1]);
+});
+
 test('renders a concave selection across box boundaries', async ({ page }, testInfo) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });

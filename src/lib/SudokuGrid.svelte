@@ -286,6 +286,7 @@
                                     class="candidate text-text-grayed cascadia-code"
                                     class:candidate-hidden={!cell.candidates[keypadInts.indexOf(num)]}
                                     class:candidate-crossed-out={cell.crossedOutCandidates[keypadInts.indexOf(num)]}
+                                    class:candidate-bold={cell.boldCandidates[keypadInts.indexOf(num)]}
                                     aria-hidden={!cell.candidates[keypadInts.indexOf(num)]}
                                     data-candidate={num}
                                 >{num}</span>
@@ -489,6 +490,16 @@
         border-top: 0.1rem solid var(--color-secondary-muted);
         transform: translate(-50%, -50%) rotate(35deg);
         pointer-events: none;
+    }
+
+    .candidate-bold {
+        color: var(--color-accent);
+        font-weight: bold;
+    }
+
+    .candidate-bold.candidate-crossed-out {
+        color: var(--color-text-grayed);
+        font-weight: 400;
     }
 
     .candidate-hidden {
