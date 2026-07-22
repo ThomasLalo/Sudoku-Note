@@ -108,6 +108,17 @@
 			for (const cell of selectedCells) {
 				cell.boldCandidates[candidateIndex] = true;
 			}
+		} else if (keypadMode === 'Add candidate') {
+			const candidateIndex = keypadInts.indexOf(fillValue);
+			for (const cell of selectedCells) {
+				if (cell.fillNumber !== null) continue;
+
+				cell.crossedOutCandidates[candidateIndex] = false;
+				cell.boldCandidates[candidateIndex] = false;
+				if (!cell.candidates[candidateIndex]) {
+					cell.manuallyAddedCandidates[candidateIndex] = true;
+				}
+			}
 		} else if (keypadMode === 'Reveal all candidates') {
 			revealedNumber = fillValue;
 		}

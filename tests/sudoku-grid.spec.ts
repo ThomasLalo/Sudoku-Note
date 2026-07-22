@@ -316,6 +316,80 @@ test('bolds candidates from the keyboard without filling selected cells', async 
 	await expect(cell.locator('.value')).toHaveCount(0);
 });
 
+test('adds candidates from the keypad and restores their standard appearance', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+	const cells = page.locator('.sudoku-cell');
+
+	await cells.nth(0).click();
+	await page.locator('.keypad label[title="Bold candidate"]').click();
+	await page.getByRole('button', { name: '4', exact: true }).click();
+	await cells.nth(1).click();
+	await page.locator('.keypad label[title="Crossout candidate"]').click();
+	await page.getByRole('button', { name: '4', exact: true }).click();
+
+	await cells.nth(0).click();
+	await cells.nth(1).click({ modifiers: ['Shift'] });
+	await page.locator('.keypad label[title="Add candidate"]').click();
+	await page.getByRole('button', { name: '4', exact: true }).click();
+
+	for (const cellIndex of [0, 1]) {
+		const candidate = cells.nth(cellIndex).locator('[data-candidate="4"]');
+		await expect(candidate).toBeVisible();
+		await expect(candidate).not.toHaveClass(/candidate-bold/);
+		await expect(candidate).not.toHaveClass(/candidate-crossed-out/);
+		await expect(candidate).not.toHaveClass(/candidate-invalid/);
+	}
+});
+
+test('adds an eliminated candidate from the keyboard and marks both sides as errors', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+	const cells = page.locator('.sudoku-cell');
+
+	await cells.nth(0).click();
+	await page.getByRole('button', { name: '6', exact: true }).click();
+	await cells.nth(1).click();
+	const restoredCandidate = cells.nth(1).locator('[data-candidate="6"]');
+	await expect(restoredCandidate).toBeHidden();
+
+	await page.locator('.keypad label[title="Add candidate"]').click();
+	await page.keyboard.press('6');
+
+	await expect(restoredCandidate).toBeVisible();
+	await expect(restoredCandidate).toHaveClass(/candidate-invalid/);
+	await expect(page.locator('.cell-background').nth(0)).toHaveClass(/conflict/);
+	await expect(cells.nth(0).locator('.value')).toHaveClass(/value-conflict/);
+
+	const colors = await cells.nth(1).evaluate((cell) => {
+		const candidateText = cell.querySelector('.candidate-invalid .candidate-text');
+		const filledBackground = document.querySelector('.cell-background.conflict');
+		const filledValue = document.querySelector('.value-conflict');
+		const secondaryProbe = document.createElement('span');
+		const lightestProbe = document.createElement('span');
+		secondaryProbe.style.backgroundColor = 'var(--color-secondary)';
+		lightestProbe.style.color = 'var(--color-background-lightest)';
+		document.body.append(secondaryProbe, lightestProbe);
+		const result = {
+			candidateBackground: candidateText ? getComputedStyle(candidateText).backgroundColor : '',
+			candidateText: candidateText ? getComputedStyle(candidateText).color : '',
+			filledBackground: filledBackground ? getComputedStyle(filledBackground).backgroundColor : '',
+			filledText: filledValue ? getComputedStyle(filledValue).color : '',
+			secondary: getComputedStyle(secondaryProbe).backgroundColor,
+			lightest: getComputedStyle(lightestProbe).color
+		};
+		secondaryProbe.remove();
+		lightestProbe.remove();
+		return result;
+	});
+	expect(colors.candidateBackground).toBe(colors.secondary);
+	expect(colors.filledBackground).toBe(colors.secondary);
+	expect(colors.candidateText).toBe(colors.lightest);
+	expect(colors.filledText).toBe(colors.lightest);
+});
+
 test('renders crossed-out bold candidates like regular crossed-out candidates', async ({ page }) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });

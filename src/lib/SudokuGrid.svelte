@@ -34,6 +34,21 @@
             }
         }
 
+		for (const cell of gridStateRows.flat()) {
+			for (const [candidateIndex, manuallyAdded] of cell.manuallyAddedCandidates.entries()) {
+				if (!manuallyAdded || cell.candidates[candidateIndex]) continue;
+				const candidate = keypadInts[candidateIndex];
+				const seenCells = new Set([
+					...gridState[cell.boxNumber - 1],
+					...gridStateRows[cell.rowNumber0based],
+					...columns[cell.colNumber0based]
+				]);
+				for (const seenCell of seenCells) {
+					if (seenCell.fillNumber === candidate) conflicts.add(seenCell);
+				}
+			}
+		}
+
         return conflicts;
     });
 
@@ -314,13 +329,17 @@
                     {:else}
                         <div class="candidate-grid">
                             {#each candidateInts as num}
+								{@const candidateIndex = keypadInts.indexOf(num)}
+								{@const candidateVisible = cell.candidates[candidateIndex] || cell.manuallyAddedCandidates[candidateIndex]}
+								{@const candidateInvalid = cell.manuallyAddedCandidates[candidateIndex] && !cell.candidates[candidateIndex]}
                                 <span
                                     class="candidate text-text-grayed cascadia-code"
-                                    class:candidate-hidden={!cell.candidates[keypadInts.indexOf(num)]}
-                                    class:candidate-crossed-out={cell.crossedOutCandidates[keypadInts.indexOf(num)]}
-                                    class:candidate-bold={cell.boldCandidates[keypadInts.indexOf(num)]}
-                                    class:candidate-revealed={num === revealedNumber && cell.candidates[keypadInts.indexOf(num)] && !cell.crossedOutCandidates[keypadInts.indexOf(num)]}
-                                    aria-hidden={!cell.candidates[keypadInts.indexOf(num)]}
+									class:candidate-hidden={!candidateVisible}
+									class:candidate-crossed-out={cell.crossedOutCandidates[candidateIndex]}
+									class:candidate-bold={cell.boldCandidates[candidateIndex]}
+									class:candidate-invalid={candidateInvalid}
+									class:candidate-revealed={num === revealedNumber && candidateVisible && !candidateInvalid && !cell.crossedOutCandidates[candidateIndex]}
+									aria-hidden={!candidateVisible}
                                     data-candidate={num}
                                 ><span class="candidate-text">{num}</span></span>
                             {/each}
@@ -562,6 +581,18 @@
         background-color: var(--color-primary);
         box-sizing: border-box;
     }
+
+	.candidate-invalid .candidate-text {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 1.25em;
+		min-height: 1.25em;
+		padding: 0.05em;
+		color: var(--color-background-lightest);
+		background-color: var(--color-secondary);
+		box-sizing: border-box;
+	}
 
     .candidate-hidden {
         visibility: hidden;

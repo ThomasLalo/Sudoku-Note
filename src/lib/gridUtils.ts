@@ -4,6 +4,7 @@ export interface Cell {
 
     fillNumber: number | null;
     candidates: boolean[];
+    manuallyAddedCandidates: boolean[];
     crossedOutCandidates: boolean[];
     boldCandidates: boolean[];
 
@@ -78,6 +79,7 @@ export function initializeGrid(){
                 boxNumber:boxNum + 1,
                 positionInBox:cellPos + 1,
                 candidates:[true,true,true,true,true,true,true,true,true],
+                manuallyAddedCandidates:[false,false,false,false,false,false,false,false,false],
                 crossedOutCandidates:[false,false,false,false,false,false,false,false,false],
                 boldCandidates:[false,false,false,false,false,false,false,false,false],
                 fillNumber: null,
