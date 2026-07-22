@@ -6,8 +6,8 @@
     const innerGridLines = [1,2,3,4,5,6,7,8];
     const cellSpan = `${100 / 9}%`;
 
-    let {gridState = $bindable(), gridStateRows = $bindable(), selectedCells = $bindable(), lastSelected = $bindable(), flippedNotes, handleNumberInput, clearCells}:
-    {gridState: Cell[][], gridStateRows: Cell[][], selectedCells: Cell[], lastSelected: Cell, flippedNotes: boolean, handleNumberInput: (value:number) => void, clearCells: (targetCells:Cell[]) => void} = $props();
+    let {gridState = $bindable(), gridStateRows = $bindable(), selectedCells = $bindable(), lastSelected = $bindable(), flippedNotes, revealedNumber, handleNumberInput, clearCells}:
+    {gridState: Cell[][], gridStateRows: Cell[][], selectedCells: Cell[], lastSelected: Cell, flippedNotes: boolean, revealedNumber: number | null, handleNumberInput: (value:number) => void, clearCells: (targetCells:Cell[]) => void} = $props();
 
     let candidateInts = $derived(flippedNotes ? flippedInts : keypadInts);
 
@@ -118,7 +118,7 @@
             }
         }
 
-        if (['1','2','3','4','5','6','7','8','9'].includes(event.key) && selectedCells.length !== 0) {
+        if (['1','2','3','4','5','6','7','8','9'].includes(event.key)) {
             handleNumberInput(Number(event.key));
         }
 
@@ -144,6 +144,7 @@
                     class="cell-background"
                     class:selected={cell.isSelected}
                     class:hovered={hoveredCell === cell}
+                    class:revealed={revealedNumber !== null && cell.fillNumber === revealedNumber}
                 ></div>
             {/each}
         {/each}
@@ -277,7 +278,10 @@
                 >
                     {#if cell.fillNumber !== null}
                         <div class="value-container">
-                            <span class="value text-text cascadia-code">{cell.fillNumber}</span>
+                            <span
+                                class="value text-text cascadia-code"
+                                class:value-revealed={revealedNumber !== null && cell.fillNumber === revealedNumber}
+                            >{cell.fillNumber}</span>
                         </div>
                     {:else}
                         <div class="candidate-grid">
@@ -287,9 +291,10 @@
                                     class:candidate-hidden={!cell.candidates[keypadInts.indexOf(num)]}
                                     class:candidate-crossed-out={cell.crossedOutCandidates[keypadInts.indexOf(num)]}
                                     class:candidate-bold={cell.boldCandidates[keypadInts.indexOf(num)]}
+                                    class:candidate-revealed={num === revealedNumber && cell.candidates[keypadInts.indexOf(num)] && !cell.crossedOutCandidates[keypadInts.indexOf(num)]}
                                     aria-hidden={!cell.candidates[keypadInts.indexOf(num)]}
                                     data-candidate={num}
-                                >{num}</span>
+                                ><span class="candidate-text">{num}</span></span>
                             {/each}
                         </div>
                     {/if}
@@ -347,6 +352,10 @@
 
     .cell-background.selected.hovered {
         background-color: var(--color-accent-lighter);
+    }
+
+    .cell-background.revealed {
+        background-color: var(--color-primary);
     }
 
     .variant-layer {
@@ -463,6 +472,10 @@
         font-size: 4rem;
     }
 
+    .value-revealed {
+        color: var(--color-background-lightest);
+    }
+
     .candidate-grid {
         width: 100%;
         height: 100%;
@@ -500,6 +513,18 @@
     .candidate-bold.candidate-crossed-out {
         color: var(--color-text-grayed);
         font-weight: 400;
+    }
+
+    .candidate-revealed .candidate-text {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.25em;
+        min-height: 1.25em;
+        padding: 0.05em;
+        color: var(--color-background-lightest);
+        background-color: var(--color-primary);
+        box-sizing: border-box;
     }
 
     .candidate-hidden {

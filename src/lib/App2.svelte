@@ -19,6 +19,7 @@
 
 	let displayedPanel = $state('Keypad');
 	let keypadMode = $state('Enter digit');
+	let revealedNumber: number | null = $state(null);
 	let flippedNotes = $state(false);
 	let gridState: Cell[][] = $state(initializeGrid());
 	let selectedCells: Cell[] = $state([]);
@@ -107,6 +108,8 @@
 			for (const cell of selectedCells) {
 				cell.boldCandidates[candidateIndex] = true;
 			}
+		} else if (keypadMode === 'Reveal all candidates') {
+			revealedNumber = fillValue;
 		}
 	}
 
@@ -153,6 +156,7 @@
 				bind:selectedCells
 				bind:lastSelected
 				{flippedNotes}
+				revealedNumber={keypadMode === 'Reveal all candidates' ? revealedNumber : null}
 				{clearCells}
 				handleNumberInput={handleKeypadNumber}
 			/>

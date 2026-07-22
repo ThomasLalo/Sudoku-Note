@@ -37,6 +37,65 @@ test('fills every selected cell from the keypad in write mode', async ({ page })
 	await expect(cells.nth(10).locator('.value')).toHaveText('3');
 });
 
+test('reveals matching filled digits and uncrossed candidates from the keypad', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cells = page.locator('.sudoku-cell');
+	for (const cellIndex of [0, 40]) {
+		await cells.nth(cellIndex).click();
+		await page.getByRole('button', { name: '4', exact: true }).click();
+	}
+
+	await cells.nth(80).click();
+	await page.locator('.keypad label[title="Crossout candidate"]').click();
+	await page.getByRole('button', { name: '4', exact: true }).click();
+	await page.locator('.keypad label[title="Reveal all candidates"]').click();
+	await page.getByRole('button', { name: '4', exact: true }).click();
+
+	const backgrounds = page.locator('.cell-background');
+	for (const cellIndex of [0, 40]) {
+		await expect(backgrounds.nth(cellIndex)).toHaveClass(/revealed/);
+		await expect(cells.nth(cellIndex).locator('.value')).toHaveClass(/value-revealed/);
+	}
+
+	const revealedCandidate = cells.nth(70).locator('[data-candidate="4"]');
+	await expect(revealedCandidate).toHaveClass(/candidate-revealed/);
+	await expect(revealedCandidate.locator('.candidate-text')).toHaveCSS(
+		'background-color',
+		await page.locator('body').evaluate((body) => {
+			const probe = document.createElement('span');
+			probe.style.backgroundColor = 'var(--color-primary)';
+			body.append(probe);
+			const color = getComputedStyle(probe).backgroundColor;
+			probe.remove();
+			return color;
+		})
+	);
+
+	const crossedCandidate = cells.nth(80).locator('[data-candidate="4"]');
+	await expect(crossedCandidate).toHaveClass(/candidate-crossed-out/);
+	await expect(crossedCandidate).not.toHaveClass(/candidate-revealed/);
+});
+
+test('reveals a number from the keyboard without requiring a selected cell', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cell = page.locator('.sudoku-cell').first();
+	await cell.click();
+	await page.getByRole('button', { name: '7', exact: true }).click();
+	await page.locator('.keypad label[title="Reveal all candidates"]').click();
+	await page.keyboard.press('Escape');
+	await page.keyboard.press('7');
+
+	await expect(page.locator('.cell-background').first()).toHaveClass(/revealed/);
+	await expect(cell.locator('.value')).toHaveClass(/value-revealed/);
+	await expect(page.locator('.cell-background.selected')).toHaveCount(0);
+});
+
 test('hides eliminated candidates without shifting the remaining candidates', async ({ page }) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
