@@ -37,6 +37,51 @@ test('fills every selected cell from the keypad in write mode', async ({ page })
 	await expect(cells.nth(10).locator('.value')).toHaveText('3');
 });
 
+test('marks duplicate filled digits that see each other as conflicts', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cells = page.locator('.sudoku-cell');
+	const backgrounds = page.locator('.cell-background');
+	// Cover row (0 and 4), box (10 and 20), and column (27 and 54) conflicts.
+	const conflictingIndexes = [0, 4, 10, 20, 27, 54];
+
+	for (const cellIndex of conflictingIndexes) {
+		await cells.nth(cellIndex).click();
+		await page.getByRole('button', { name: '3', exact: true }).click();
+	}
+
+	for (const cellIndex of conflictingIndexes) {
+		await expect(backgrounds.nth(cellIndex)).toHaveClass(/conflict/);
+		await expect(cells.nth(cellIndex).locator('.value')).toHaveClass(/value-conflict/);
+	}
+	await expect(backgrounds.nth(40)).not.toHaveClass(/conflict/);
+
+	const conflictColors = await cells.nth(0).evaluate((cell) => {
+		const background = document.querySelector('.cell-background.conflict');
+		const value = cell.querySelector('.value-conflict');
+		const probe = document.createElement('span');
+		probe.style.backgroundColor = 'var(--color-secondary)';
+		probe.style.color = 'var(--color-background-lightest)';
+		document.body.append(probe);
+		const colors = {
+			actualBackground: background ? getComputedStyle(background).backgroundColor : '',
+			expectedBackground: getComputedStyle(probe).backgroundColor,
+			actualText: value ? getComputedStyle(value).color : '',
+			expectedText: getComputedStyle(probe).color
+		};
+		probe.remove();
+		return colors;
+	});
+	expect(conflictColors.actualBackground).toBe(conflictColors.expectedBackground);
+	expect(conflictColors.actualText).toBe(conflictColors.expectedText);
+
+	await cells.nth(54).click();
+	await page.getByRole('button', { name: 'Delete digit' }).click();
+	await expect(backgrounds.nth(54)).not.toHaveClass(/conflict/);
+});
+
 test('reveals matching filled digits and uncrossed candidates from the keypad', async ({ page }) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });

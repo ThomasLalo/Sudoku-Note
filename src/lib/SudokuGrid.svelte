@@ -11,6 +11,32 @@
 
     let candidateInts = $derived(flippedNotes ? flippedInts : keypadInts);
 
+    let conflictingCells = $derived.by(() => {
+        const conflicts = new Set<Cell>();
+        const columns = gridStateRows[0].map((_, colIndex) =>
+            gridStateRows.map((row) => row[colIndex])
+        );
+        const groups = [...gridStateRows, ...columns, ...gridState];
+
+        for (const group of groups) {
+            const cellsByValue = new Map<number, Cell[]>();
+            for (const cell of group) {
+                if (cell.fillNumber === null) continue;
+                const matchingCells = cellsByValue.get(cell.fillNumber) ?? [];
+                matchingCells.push(cell);
+                cellsByValue.set(cell.fillNumber, matchingCells);
+            }
+
+            for (const matchingCells of cellsByValue.values()) {
+                if (matchingCells.length > 1) {
+                    matchingCells.forEach((cell) => conflicts.add(cell));
+                }
+            }
+        }
+
+        return conflicts;
+    });
+
     let dragAdding = false;
     let dragRemoving = false;
     let hoveredCell: Cell | null = $state(null);
@@ -145,6 +171,7 @@
                     class:selected={cell.isSelected}
                     class:hovered={hoveredCell === cell}
                     class:revealed={revealedNumber !== null && cell.fillNumber === revealedNumber}
+                    class:conflict={conflictingCells.has(cell)}
                 ></div>
             {/each}
         {/each}
@@ -281,6 +308,7 @@
                             <span
                                 class="value text-text cascadia-code"
                                 class:value-revealed={revealedNumber !== null && cell.fillNumber === revealedNumber}
+                                class:value-conflict={conflictingCells.has(cell)}
                             >{cell.fillNumber}</span>
                         </div>
                     {:else}
@@ -356,6 +384,10 @@
 
     .cell-background.revealed {
         background-color: var(--color-primary);
+    }
+
+    .cell-background.conflict {
+        background-color: var(--color-secondary);
     }
 
     .variant-layer {
@@ -473,6 +505,10 @@
     }
 
     .value-revealed {
+        color: var(--color-background-lightest);
+    }
+
+    .value-conflict {
         color: var(--color-background-lightest);
     }
 
