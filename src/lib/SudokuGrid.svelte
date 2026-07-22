@@ -2,11 +2,14 @@
     import type { Cell } from "./gridUtils";
     import { getAdjacentCell } from "./gridUtils";
     const keypadInts = [7,8,9,4,5,6,1,2,3];
+    const flippedInts = [1,2,3,4,5,6,7,8,9];
     const innerGridLines = [1,2,3,4,5,6,7,8];
     const cellSpan = `${100 / 9}%`;
 
-    let {gridState = $bindable(), gridStateRows = $bindable(), selectedCells = $bindable(), lastSelected = $bindable(), fillCell}:
-    {gridState: Cell[][], gridStateRows: Cell[][], selectedCells: Cell[], lastSelected: Cell, fillCell: (targetCell:Cell, fillValue:number) => void} = $props();
+    let {gridState = $bindable(), gridStateRows = $bindable(), selectedCells = $bindable(), lastSelected = $bindable(), flippedNotes, handleNumberInput, clearCells}:
+    {gridState: Cell[][], gridStateRows: Cell[][], selectedCells: Cell[], lastSelected: Cell, flippedNotes: boolean, handleNumberInput: (value:number) => void, clearCells: (targetCells:Cell[]) => void} = $props();
+
+    let candidateInts = $derived(flippedNotes ? flippedInts : keypadInts);
 
     let dragAdding = false;
     let dragRemoving = false;
@@ -115,15 +118,13 @@
             }
         }
 
-        if (['1','2','3','4','5','6','7','8','9'].includes(event.key) && selectedCells.length === 1) {
-            // selectedCells[0].fillNumber = Number(event.key);
-            fillCell(selectedCells[0], Number(event.key));
+        if (['1','2','3','4','5','6','7','8','9'].includes(event.key) && selectedCells.length !== 0) {
+            handleNumberInput(Number(event.key));
         }
 
         if (['Backspace','Delete'].includes(event.key)) {
-            for (const cell of selectedCells) {
-                cell.fillNumber = null; // this needs to be a function to reset candidates
-            }
+            event.preventDefault();
+            clearCells(selectedCells);
         }
 
         if (event.key === "Escape") {
@@ -280,10 +281,14 @@
                         </div>
                     {:else}
                         <div class="candidate-grid">
-                            {#each keypadInts as num, index}
-                                {#if cell.candidates[index]}
-                                    <span class="candidate text-text-grayed cascadia-code"> {num} </span>
-                                {/if}
+                            {#each candidateInts as num}
+                                <span
+                                    class="candidate text-text-grayed cascadia-code"
+                                    class:candidate-hidden={!cell.candidates[keypadInts.indexOf(num)]}
+                                    class:candidate-crossed-out={cell.crossedOutCandidates[keypadInts.indexOf(num)]}
+                                    aria-hidden={!cell.candidates[keypadInts.indexOf(num)]}
+                                    data-candidate={num}
+                                >{num}</span>
                             {/each}
                         </div>
                     {/if}
@@ -464,9 +469,30 @@
         grid-template: 1fr 1fr 1fr / 1fr 1fr 1fr;
     }
     .candidate {
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
+    }
+
+    .candidate-crossed-out {
+        opacity: 0.45;
+    }
+
+    .candidate-crossed-out::after {
+        content: '';
+        position: absolute;
+        z-index: 1;
+        top: 50%;
+        left: 50%;
+        width: 65%;
+        border-top: 0.1rem solid var(--color-secondary-muted);
+        transform: translate(-50%, -50%) rotate(35deg);
+        pointer-events: none;
+    }
+
+    .candidate-hidden {
+        visibility: hidden;
     }
 
     @media(max-width: 450px) or (max-height:680px) {

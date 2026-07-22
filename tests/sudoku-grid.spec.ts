@@ -37,20 +37,135 @@ test('fills every selected cell from the keypad in write mode', async ({ page })
 	await expect(cells.nth(10).locator('.value')).toHaveText('3');
 });
 
-test('leaves number clicks inactive in unfinished keypad modes', async ({ page }) => {
+test('hides eliminated candidates without shifting the remaining candidates', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cells = page.locator('.sudoku-cell');
+	const visiblePeer = cells.nth(1);
+	const candidate7 = visiblePeer.locator('[data-candidate="7"]');
+	const candidate8 = visiblePeer.locator('[data-candidate="8"]');
+	const candidate9 = visiblePeer.locator('[data-candidate="9"]');
+	const positionsBefore = await Promise.all([candidate7.boundingBox(), candidate8.boundingBox()]);
+
+	await cells.nth(0).click();
+	await page.getByRole('button', { name: '9', exact: true }).click();
+
+	await expect(candidate9).toHaveCSS('visibility', 'hidden');
+	await expect(candidate9).toHaveAttribute('aria-hidden', 'true');
+	const positionsAfter = await Promise.all([candidate7.boundingBox(), candidate8.boundingBox()]);
+	for (const [index, before] of positionsBefore.entries()) {
+		expect(before).not.toBeNull();
+		expect(positionsAfter[index]).not.toBeNull();
+		expect(positionsAfter[index]?.x).toBeCloseTo(before?.x ?? 0, 5);
+		expect(positionsAfter[index]?.y).toBeCloseTo(before?.y ?? 0, 5);
+	}
+});
+
+test('recalculates visible candidates when a filled value is deleted', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cells = page.locator('.sudoku-cell');
+	await cells.nth(0).click();
+	await page.getByRole('button', { name: '9', exact: true }).click();
+	await cells.nth(1).click();
+	await page.getByRole('button', { name: '9', exact: true }).click();
+
+	const stillBlockedCandidate = cells.nth(9).locator('[data-candidate="9"]');
+	const restoredCandidate = cells.nth(27).locator('[data-candidate="9"]');
+	await expect(stillBlockedCandidate).toHaveCSS('visibility', 'hidden');
+	await expect(restoredCandidate).toHaveCSS('visibility', 'hidden');
+
+	await cells.nth(0).click();
+	await page.getByRole('button', { name: 'Delete digit' }).click();
+
+	await expect(cells.nth(0).locator('.value')).toHaveCount(0);
+	await expect(stillBlockedCandidate).toHaveCSS('visibility', 'hidden');
+	await expect(restoredCandidate).toHaveCSS('visibility', 'visible');
+});
+
+test('switches notes and keypad between standard and flipped layouts', async ({ page }) => {
+	await page.setViewportSize({ width: 1920, height: 1080 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const firstCellCandidates = page.locator('.sudoku-cell').first().locator('[data-candidate]');
+	const keypadButtons = page.locator('.keypad button');
+	const getKeypadOrder = () =>
+		keypadButtons.evaluateAll((buttons) =>
+			buttons.slice(0, 9).map((button) => button.getAttribute('aria-label'))
+		);
+	await expect(firstCellCandidates).toHaveCount(9);
+	expect(await firstCellCandidates.evaluateAll((candidates) => candidates.map((candidate) => candidate.getAttribute('data-candidate')))).toEqual([
+		'7',
+		'8',
+		'9',
+		'4',
+		'5',
+		'6',
+		'1',
+		'2',
+		'3'
+	]);
+	expect(await getKeypadOrder()).toEqual(['7', '8', '9', '4', '5', '6', '1', '2', '3']);
+
+	await page.locator('label').filter({ hasText: 'Flipped notes' }).click();
+	expect(await firstCellCandidates.evaluateAll((candidates) => candidates.map((candidate) => candidate.getAttribute('data-candidate')))).toEqual([
+		'1',
+		'2',
+		'3',
+		'4',
+		'5',
+		'6',
+		'7',
+		'8',
+		'9'
+	]);
+	expect(await getKeypadOrder()).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
+});
+
+test('crosses out a candidate in every selected cell from the keypad', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cells = page.locator('.sudoku-cell');
+	await expect(page.getByRole('button', { name: 'Delete digit' })).toBeVisible();
+	await expect(page.locator('.keypad input[type="radio"]')).toHaveCount(5);
+	await cells.nth(0).click();
+	await cells.nth(10).click({ modifiers: ['Shift'] });
+	await page.locator('.keypad label[title="Crossout candidate"]').click();
+	await expect(page.getByLabel('Crossout candidate')).toBeChecked();
+	await page.getByRole('button', { name: '4', exact: true }).click();
+
+	for (const cellIndex of [0, 10]) {
+		const candidate = cells.nth(cellIndex).locator('[data-candidate="4"]');
+		await expect(candidate).toHaveClass(/candidate-crossed-out/);
+		const decoration = await candidate.evaluate((element) => {
+			const line = getComputedStyle(element, '::after');
+			return { content: line.content, borderColor: line.borderTopColor, width: line.width };
+		});
+		expect(decoration.content).not.toBe('none');
+		expect(decoration.borderColor).not.toBe('rgba(0, 0, 0, 0)');
+		expect(Number.parseFloat(decoration.width)).toBeGreaterThan(0);
+	}
+});
+
+test('crosses out candidates from the keyboard without filling selected cells', async ({ page }) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
 	await waitForGridHydration(page);
 
 	const cell = page.locator('.sudoku-cell').first();
-	await expect(page.getByRole('button', { name: 'Delete digit' })).toBeVisible();
-	await expect(page.locator('.keypad input[type="radio"]')).toHaveCount(5);
 	await cell.click();
 	await page.locator('.keypad label[title="Crossout candidate"]').click();
-	await expect(page.getByLabel('Crossout candidate')).toBeChecked();
-	await page.getByRole('button', { name: '4', exact: true }).click();
+	await page.keyboard.press('7');
 
 	await expect(cell.locator('.value')).toHaveCount(0);
+	await expect(cell.locator('[data-candidate="7"]')).toHaveClass(/candidate-crossed-out/);
 });
 
 test('renders a concave selection across box boundaries', async ({ page }, testInfo) => {
@@ -142,7 +257,9 @@ test('uses even spacing above and below the grid on desktop', async ({ page }) =
 	await waitForGridHydration(page);
 
 	const gridBounds = await page.locator('.sudoku-grid').boundingBox();
-	const bottomEdgeBounds = await page.locator('.bottom-parallelogram').first().boundingBox();
+	const bottomEdgeBounds = await page
+		.locator('.sudoku-grid-container .bottom-parallelogram')
+		.boundingBox();
 
 	expect(gridBounds).not.toBeNull();
 	expect(bottomEdgeBounds).not.toBeNull();

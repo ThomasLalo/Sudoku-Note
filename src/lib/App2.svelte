@@ -3,6 +3,7 @@
 	import KeypadButton from './KeypadButton.svelte';
 	import RadioButtons from './RadioButtons.svelte';
 	import SudokuGrid from './SudokuGrid.svelte';
+	import TextSwitch from './TextSwitch.svelte';
 	import Delete from '@lucide/svelte/icons/delete';
 	import Highlighter from '@lucide/svelte/icons/highlighter';
 	import Pencil from '@lucide/svelte/icons/pencil';
@@ -13,10 +14,12 @@
 	import type { Cell } from './gridUtils';
 	import { initializeGrid, getAdjacentCell } from './gridUtils';
 	const keypadInts = [7, 8, 9, 4, 5, 6, 1, 2, 3];
+	const flippedKeypadInts = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 	const smallerThanDesktop = new MediaQuery('max-width: 1615px');
 
 	let displayedPanel = $state('Keypad');
 	let keypadMode = $state('Enter digit');
+	let flippedNotes = $state(false);
 	let gridState: Cell[][] = $state(initializeGrid());
 	let selectedCells: Cell[] = $state([]);
 	let lastSelected: Cell = $derived(gridState[0][0]);
@@ -72,15 +75,43 @@
 		}
 	}
 
-	function handleKeypadNumber(fillValue: number) {
-		if (keypadMode !== 'Enter digit') return;
-
-		for (const cell of selectedCells) {
-			fillCell(cell, fillValue);
+	function recalculateCandidates(cells: Iterable<Cell>) {
+		for (const cell of cells) {
+			const seenCells = getSeenCells(cell);
+			cell.candidates = keypadInts.map((candidate) =>
+				seenCells.every((seenCell) => seenCell.fillNumber !== candidate)
+			);
 		}
 	}
 
-	const keypadStrings = ['7', '8', '9', '4', '5', '6', '1', '2', '3'];
+	function clearCells(targetCells: Cell[]) {
+		const affectedCells = new Set(targetCells.flatMap((cell) => getSeenCells(cell)));
+		for (const cell of targetCells) {
+			cell.fillNumber = null;
+		}
+		recalculateCandidates(affectedCells);
+	}
+
+	function handleKeypadNumber(fillValue: number) {
+		if (keypadMode === 'Enter digit') {
+			for (const cell of selectedCells) {
+				fillCell(cell, fillValue);
+			}
+		} else if (keypadMode === 'Crossout candidate') {
+			const candidateIndex = keypadInts.indexOf(fillValue);
+			for (const cell of selectedCells) {
+				cell.crossedOutCandidates[candidateIndex] = true;
+			}
+		}
+	}
+
+	function toggleNoteLayout() {
+		flippedNotes = !flippedNotes;
+	}
+
+	let keypadStrings = $derived(
+		(flippedNotes ? flippedKeypadInts : keypadInts).map((number) => String(number))
+	);
 	const panelLabels = ['Keypad', 'Info'];
 </script>
 
@@ -97,6 +128,13 @@
 						in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat
 						cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum
 					</p>
+					<div class="note-layout-switch">
+						<TextSwitch
+							label="Flipped notes"
+							onchangeHandler={toggleNoteLayout}
+							binder={flippedNotes}
+						/>
+					</div>
 				</div>
 			</IsometricBorder>
 		</div>
@@ -109,7 +147,9 @@
 				bind:gridStateRows
 				bind:selectedCells
 				bind:lastSelected
-				{fillCell}
+				{flippedNotes}
+				{clearCells}
+				handleNumberInput={handleKeypadNumber}
 			/>
 		</IsometricBorder>
 	</div>
@@ -127,7 +167,11 @@
 								onchangeHandler={() => handleKeypadNumber(Number(num))}
 							/>
 						{/each}
-						<KeypadButton label="Delete digit" color="secondary">
+						<KeypadButton
+							label="Delete digit"
+							color="secondary"
+							onchangeHandler={() => clearCells(selectedCells)}
+						>
 							<Delete />
 						</KeypadButton>
 						<KeypadButton label="Enter digit" color="text" toggle bind:binder={keypadMode}>
@@ -215,6 +259,10 @@
 
 	.info-content {
 		border: var(--panel-face-border-size) solid var(--color-secondary-light);
+	}
+
+	.note-layout-switch {
+		margin-top: 1rem;
 	}
 
 	.keypad-content {
