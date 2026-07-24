@@ -54,6 +54,9 @@
 
     let dragAdding = false;
     let dragRemoving = false;
+    let activePointerId: number | null = null;
+    let lastPointerPosition: { x: number; y: number } | null = null;
+    let lastGestureCell: Cell | null = null;
     let hoveredCell: Cell | null = $state(null);
 
     const isCellSelected = (row: number, col: number) =>
@@ -82,6 +85,8 @@
 
     function addToSelection(box:number,cell:number) {
         const cellObj = gridState[box][cell];
+        if (cellObj.isSelected) return;
+
         cellObj.isSelected = true;
         selectedCells.push(cellObj);
         lastSelected = cellObj;
@@ -89,11 +94,17 @@
 
     function removeFromSelection(box:number,cell:number) {
         const cellObj = gridState[box][cell];
+        if (!cellObj.isSelected) return;
+
         cellObj.isSelected = false;
         selectedCells = selectedCells.filter(value => value !== cellObj);
     }
 
-    function handleMouseDown(event:MouseEvent, boxNumber:number, cellNumber:number) {
+    function handlePointerDown(event: PointerEvent, boxNumber: number, cellNumber: number) {
+        if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
+
+        activePointerId = event.pointerId;
+        lastPointerPosition = { x: event.clientX, y: event.clientY };
         const cellObj = gridState[boxNumber][cellNumber];
         if (!event.shiftKey) {
             clearSelection();
@@ -105,35 +116,76 @@
             dragAdding = true;
             addToSelection(boxNumber,cellNumber);
         }
+        lastGestureCell = cellObj;
+
+        try {
+            gridElement?.setPointerCapture(event.pointerId);
+        } catch {
+            // Synthetic pointer events and interrupted gestures may not be capturable.
+        }
     }
 
-    function handleMouseEnter(boxNumber:number, cellNumber:number) {
-        hoveredCell = gridState[boxNumber][cellNumber];
+    function getCellAtPoint(x: number, y: number) {
+        const element = document.elementFromPoint(x, y);
+        const cellElement = element?.closest<HTMLElement>('.sudoku-cell');
+        if (!cellElement || !gridElement?.contains(cellElement)) return null;
+
+        const boxIndex = Number(cellElement.dataset.boxIndex);
+        const cellIndex = Number(cellElement.dataset.cellIndex);
+        return gridState[boxIndex]?.[cellIndex] ?? null;
+    }
+
+    function applyDragToCell(cell: Cell | null) {
+        if (!cell || cell === lastGestureCell) return;
+
         if (dragAdding) {
-            addToSelection(boxNumber,cellNumber);
+            addToSelection(cell.boxNumber - 1, cell.positionInBox - 1);
+        } else if (dragRemoving) {
+            removeFromSelection(cell.boxNumber - 1, cell.positionInBox - 1);
         }
-        if (dragRemoving) {
-            removeFromSelection(boxNumber,cellNumber);
-        }
+        lastGestureCell = cell;
     }
 
-    function handleMouseLeave(cell: Cell) {
-        if (hoveredCell === cell) hoveredCell = null;
+    function handlePointerMove(event: PointerEvent) {
+        const currentCell = getCellAtPoint(event.clientX, event.clientY);
+        if (event.pointerType === 'mouse') hoveredCell = currentCell;
+        if (event.pointerId !== activePointerId || !lastPointerPosition) return;
+
+        const gridRect = gridElement?.getBoundingClientRect();
+        const sampleSpacing = gridRect
+            ? Math.max(1, Math.min(gridRect.width, gridRect.height) / 18)
+            : 1;
+        const xDistance = event.clientX - lastPointerPosition.x;
+        const yDistance = event.clientY - lastPointerPosition.y;
+        const steps = Math.max(1, Math.ceil(Math.hypot(xDistance, yDistance) / sampleSpacing));
+
+        for (let step = 1; step <= steps; step += 1) {
+            const progress = step / steps;
+            applyDragToCell(getCellAtPoint(
+                lastPointerPosition.x + xDistance * progress,
+                lastPointerPosition.y + yDistance * progress
+            ));
+        }
+        lastPointerPosition = { x: event.clientX, y: event.clientY };
     }
 
-    function handleMouseUp() {
+    function finishPointerGesture(event: PointerEvent) {
+        if (event.pointerId !== activePointerId) return;
+
         dragAdding = false;
         dragRemoving = false;
-        
-    }
+        activePointerId = null;
+        lastPointerPosition = null;
+        lastGestureCell = null;
+        if (event.pointerType !== 'mouse') hoveredCell = null;
 
-    function handleGlobalMouseUp() {
-        dragAdding = false;
-        dragRemoving = false;
+        if (gridElement?.hasPointerCapture(event.pointerId)) {
+            gridElement.releasePointerCapture(event.pointerId);
+        }
     }
 
     let gridElement: HTMLDivElement | undefined; // grid element might be undefined when the page first loads. see the bind:this on sudoku-grid in the html
-    function handleGlobalMouseDown(event:MouseEvent) {
+    function handleGlobalPointerDown(event: PointerEvent) {
         const target = event.target;
         if (target instanceof Node && gridElement?.contains(target)) {
             return;
@@ -187,9 +239,21 @@
 
 </script>
 
-<svelte:window onmouseup={handleGlobalMouseUp} onmousedown={handleGlobalMouseDown} onkeydown={handleGlobalKeyDown}/>
+<svelte:window
+    onpointerup={finishPointerGesture}
+    onpointercancel={finishPointerGesture}
+    onpointerdown={handleGlobalPointerDown}
+    onkeydown={handleGlobalKeyDown}
+/>
 
-<div class="sudoku-grid" bind:this={gridElement}>
+<!-- Keyboard interaction uses the grid's selection state through the window keydown handler. -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+    class="sudoku-grid"
+    bind:this={gridElement}
+    onpointermove={handlePointerMove}
+    onpointerleave={() => hoveredCell = null}
+>
     <div class="grid-layer cell-background-layer" aria-hidden="true">
         {#each gridStateRows as row (row[0].rowNumber0based)}
             {#each row as cell (cell.boxNumber + "-" + cell.positionInBox)}
@@ -323,10 +387,9 @@
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div
                     class="sudoku-cell"
-                    onmousedown={(event) => handleMouseDown(event, cell.boxNumber - 1, cell.positionInBox - 1)}
-                    onmouseenter={() => handleMouseEnter(cell.boxNumber - 1, cell.positionInBox - 1)}
-                    onmouseleave={() => handleMouseLeave(cell)}
-                    onmouseup={handleMouseUp}
+                    data-box-index={cell.boxNumber - 1}
+                    data-cell-index={cell.positionInBox - 1}
+                    onpointerdown={(event) => handlePointerDown(event, cell.boxNumber - 1, cell.positionInBox - 1)}
                     bind:this={cell.element}
                     bind:clientWidth={cell.width}
                     bind:clientHeight={cell.height}
@@ -379,6 +442,7 @@
         width: 100%;
         height: 100%;
         background-color: var(--color-background-lightest);
+        touch-action: none;
     }
 
     .grid-layer {

@@ -20,6 +20,63 @@ test('renders and selects cells in the layered Sudoku grid', async ({ page }) =>
 	await expect.poll(() => grid.locator('.selection-segment').count()).toBeGreaterThan(0);
 });
 
+test('selects multiple cells with a touch pointer drag', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const grid = page.locator('.sudoku-grid');
+	const cells = page.locator('.sudoku-cell');
+	const start = await cells.nth(0).boundingBox();
+	const end = await cells.nth(2).boundingBox();
+	expect(start).not.toBeNull();
+	expect(end).not.toBeNull();
+
+	const pointer = {
+		pointerId: 1,
+		pointerType: 'touch',
+		isPrimary: true,
+		button: 0
+	};
+	await cells.nth(0).dispatchEvent('pointerdown', {
+		...pointer,
+		clientX: start!.x + start!.width / 2,
+		clientY: start!.y + start!.height / 2
+	});
+	await grid.dispatchEvent('pointermove', {
+		...pointer,
+		clientX: end!.x + end!.width / 2,
+		clientY: end!.y + end!.height / 2
+	});
+	await grid.dispatchEvent('pointerup', {
+		...pointer,
+		clientX: end!.x + end!.width / 2,
+		clientY: end!.y + end!.height / 2
+	});
+
+	await expect(page.locator('.cell-background.selected')).toHaveCount(3);
+	await expect(grid).toHaveCSS('touch-action', 'none');
+});
+
+test('preserves mouse drag selection with pointer events', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cells = page.locator('.sudoku-cell');
+	const start = await cells.nth(0).boundingBox();
+	const end = await cells.nth(2).boundingBox();
+	expect(start).not.toBeNull();
+	expect(end).not.toBeNull();
+
+	await page.mouse.move(start!.x + start!.width / 2, start!.y + start!.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(end!.x + end!.width / 2, end!.y + end!.height / 2);
+	await page.mouse.up();
+
+	await expect(page.locator('.cell-background.selected')).toHaveCount(3);
+});
+
 test('fills every selected cell from the keypad in write mode', async ({ page }) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
