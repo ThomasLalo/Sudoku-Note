@@ -6,16 +6,20 @@
 		color,
 		onchangeHandler = () => {},
 		toggle = false,
+		checkbox = false,
 		binder = $bindable(''),
 		activeBinder,
+		checked = $bindable(false),
 		children
 	}: {
 		label: string;
 		color: string;
 		onchangeHandler?: () => void;
 		toggle?: boolean;
+		checkbox?: boolean;
 		binder?: string;
 		activeBinder?: string;
+		checked?: boolean;
 		children?: Snippet;
 	} = $props();
 
@@ -38,7 +42,28 @@
     `);
 </script>
 
-{#if toggle}
+{#if checkbox}
+	<label
+		class="button-isometric-container"
+		style={styleString}
+		data-preserve-grid-selection
+		title={label}
+	>
+		<div class="button-face text-background-lightest bg-{color} cascadia-code">
+			<span class="button-content" aria-hidden="true">
+				{#if children}
+					{@render children()}
+				{:else}
+					{label}
+				{/if}
+			</span>
+			<input type="checkbox" aria-label={label} bind:checked />
+			<div class="button-corner-square"></div>
+			<div class="button-right-parallelogram"></div>
+			<div class="button-bottom-parallelogram"></div>
+		</div>
+	</label>
+{:else if toggle}
 	<label
 		class="button-isometric-container"
 		style={styleString}

@@ -10,6 +10,7 @@
 	import PencilOff from '@lucide/svelte/icons/pencil-off';
 	import Spotlight from '@lucide/svelte/icons/spotlight';
 	import SquareArrowRight from '@lucide/svelte/icons/square-arrow-right';
+	import Grid2x2Plus from '@lucide/svelte/icons/grid-2x2-plus';
 	import { MediaQuery } from 'svelte/reactivity';
 	import type { Cell } from './gridUtils';
 	import { initializeGrid, getAdjacentCell } from './gridUtils';
@@ -41,6 +42,7 @@
 	});
 	let revealedNumber: number | null = $state(null);
 	let flippedNotes = $state(false);
+	let multiSelect = $state(false);
 	let gridState: Cell[][] = $state(initializeGrid());
 	let selectedCells: Cell[] = $state([]);
 	let lastSelected: Cell = $derived(gridState[0][0]);
@@ -215,6 +217,7 @@
 				bind:selectedCells
 				bind:lastSelected
 				{flippedNotes}
+				{multiSelect}
 				revealedNumber={activeKeypadMode === 'Reveal all candidates' ? revealedNumber : null}
 				{clearCells}
 				handleNumberInput={handleKeypadNumber}
@@ -226,7 +229,7 @@
 		<div class="right-panel">
 			<IsometricBorder color="accent" fitContent>
 				<div class="keypad-content bg-background-lightest">
-					<h1 class="text-primary cascadia-code">Keypad</h1>
+					<!-- <h1 class="text-primary cascadia-code">Keypad</h1> -->
 					<div class="keypad">
 						{#each keypadStrings as num (num)}
 							<KeypadButton
@@ -286,6 +289,11 @@
 							activeBinder={activeKeypadMode}
 						>
 							<Highlighter />
+						</KeypadButton>
+					</div>
+					<div class="keypad secondary-keypad">
+						<KeypadButton label="Multi-select" color="accent" checkbox bind:checked={multiSelect}>
+							<Grid2x2Plus />
 						</KeypadButton>
 					</div>
 				</div>
@@ -371,6 +379,11 @@
 		grid-template-columns: repeat(3, max-content);
 		gap: 1rem;
 	}
+
+	.secondary-keypad {
+		margin-top: calc(1rem + var(--button-border-width));
+	}
+
 	.layout-button-container {
 		display: none;
 		grid-area: button;

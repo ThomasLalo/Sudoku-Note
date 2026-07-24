@@ -77,6 +77,60 @@ test('preserves mouse drag selection with pointer events', async ({ page }) => {
 	await expect(page.locator('.cell-background.selected')).toHaveCount(3);
 });
 
+test('multi-select toggles cells and keeps each drag add-only or remove-only', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const grid = page.locator('.sudoku-grid');
+	const cells = page.locator('.sudoku-cell');
+	const multiSelect = page.getByLabel('Multi-select');
+	const secondaryKeypad = page.locator('.secondary-keypad');
+	const multiSelectButton = secondaryKeypad.locator('label[title="Multi-select"]');
+
+	await expect(secondaryKeypad).toHaveCount(1);
+	await expect(multiSelect).not.toBeChecked();
+	await multiSelectButton.click();
+	await expect(multiSelect).toBeChecked();
+
+	await cells.nth(0).click();
+	await cells.nth(10).click();
+	await expect(page.locator('.cell-background.selected')).toHaveCount(2);
+
+	await cells.nth(0).click();
+	await expect(page.locator('.cell-background.selected')).toHaveCount(1);
+
+	const addStart = await cells.nth(1).boundingBox();
+	const addEnd = await cells.nth(3).boundingBox();
+	expect(addStart).not.toBeNull();
+	expect(addEnd).not.toBeNull();
+	await page.mouse.move(addStart!.x + addStart!.width / 2, addStart!.y + addStart!.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(addEnd!.x + addEnd!.width / 2, addEnd!.y + addEnd!.height / 2);
+	await page.mouse.up();
+	await expect(page.locator('.cell-background.selected')).toHaveCount(4);
+
+	const removeStart = await cells.nth(1).boundingBox();
+	const removeEnd = await cells.nth(3).boundingBox();
+	await page.mouse.move(
+		removeStart!.x + removeStart!.width / 2,
+		removeStart!.y + removeStart!.height / 2
+	);
+	await page.mouse.down();
+	await page.mouse.move(removeEnd!.x + removeEnd!.width / 2, removeEnd!.y + removeEnd!.height / 2);
+	await page.mouse.up();
+	await expect(page.locator('.cell-background.selected')).toHaveCount(1);
+
+	await page.keyboard.press('ArrowRight');
+	await expect(page.locator('.cell-background.selected')).toHaveCount(1);
+	await expect(page.locator('.cell-background').nth(10)).not.toHaveClass(/selected/);
+	await expect(page.locator('.cell-background').nth(11)).toHaveClass(/selected/);
+
+	await multiSelectButton.click();
+	await cells.nth(20).click();
+	await expect(page.locator('.cell-background.selected')).toHaveCount(1);
+});
+
 test('fills every selected cell from the keypad in write mode', async ({ page }) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -139,7 +193,9 @@ test('marks duplicate filled digits that see each other as conflicts', async ({ 
 	await expect(backgrounds.nth(54)).not.toHaveClass(/conflict/);
 });
 
-test('reveals matching filled digits and uncrossed candidates from the keypad', async ({ page }) => {
+test('reveals matching filled digits and uncrossed candidates from the keypad', async ({
+	page
+}) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
 	await waitForGridHydration(page);
@@ -273,31 +329,19 @@ test('switches notes and keypad between standard and flipped layouts', async ({ 
 			buttons.slice(0, 9).map((button) => button.getAttribute('aria-label'))
 		);
 	await expect(firstCellCandidates).toHaveCount(9);
-	expect(await firstCellCandidates.evaluateAll((candidates) => candidates.map((candidate) => candidate.getAttribute('data-candidate')))).toEqual([
-		'7',
-		'8',
-		'9',
-		'4',
-		'5',
-		'6',
-		'1',
-		'2',
-		'3'
-	]);
+	expect(
+		await firstCellCandidates.evaluateAll((candidates) =>
+			candidates.map((candidate) => candidate.getAttribute('data-candidate'))
+		)
+	).toEqual(['7', '8', '9', '4', '5', '6', '1', '2', '3']);
 	expect(await getKeypadOrder()).toEqual(['7', '8', '9', '4', '5', '6', '1', '2', '3']);
 
 	await page.locator('label').filter({ hasText: 'Flipped notes' }).click();
-	expect(await firstCellCandidates.evaluateAll((candidates) => candidates.map((candidate) => candidate.getAttribute('data-candidate')))).toEqual([
-		'1',
-		'2',
-		'3',
-		'4',
-		'5',
-		'6',
-		'7',
-		'8',
-		'9'
-	]);
+	expect(
+		await firstCellCandidates.evaluateAll((candidates) =>
+			candidates.map((candidate) => candidate.getAttribute('data-candidate'))
+		)
+	).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
 	expect(await getKeypadOrder()).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
 });
 
@@ -328,7 +372,9 @@ test('crosses out a candidate in every selected cell from the keypad', async ({ 
 	}
 });
 
-test('crosses out candidates from the keyboard without filling selected cells', async ({ page }) => {
+test('crosses out candidates from the keyboard without filling selected cells', async ({
+	page
+}) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
 	await waitForGridHydration(page);
@@ -499,7 +545,9 @@ test('adds candidates from the keypad and restores their standard appearance', a
 	}
 });
 
-test('adds an eliminated candidate from the keyboard and marks both sides as errors', async ({ page }) => {
+test('adds an eliminated candidate from the keyboard and marks both sides as errors', async ({
+	page
+}) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
 	await waitForGridHydration(page);
@@ -546,7 +594,9 @@ test('adds an eliminated candidate from the keyboard and marks both sides as err
 	expect(colors.filledText).toBe(colors.lightest);
 });
 
-test('renders crossed-out bold candidates like regular crossed-out candidates', async ({ page }) => {
+test('renders crossed-out bold candidates like regular crossed-out candidates', async ({
+	page
+}) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
 	await waitForGridHydration(page);
