@@ -285,6 +285,27 @@ test('crosses out candidates from the keyboard without filling selected cells', 
 	await expect(cell.locator('[data-candidate="7"]')).toHaveClass(/candidate-crossed-out/);
 });
 
+test('cycles through keypad tools with Space', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const tools = [
+		'Enter digit',
+		'Reveal all candidates',
+		'Crossout candidate',
+		'Add candidate',
+		'Bold candidate',
+		'Enter digit'
+	];
+
+	await expect(page.getByLabel(tools[0])).toBeChecked();
+	for (const tool of tools.slice(1)) {
+		await page.keyboard.press('Space');
+		await expect(page.getByLabel(tool)).toBeChecked();
+	}
+});
+
 test('temporarily uses crossout while Shift is held and keeps Shift multi-selection', async ({
 	page
 }) => {

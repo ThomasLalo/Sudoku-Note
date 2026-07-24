@@ -22,6 +22,13 @@
 		| 'Crossout candidate'
 		| 'Add candidate'
 		| 'Bold candidate';
+	const keypadModes: KeypadMode[] = [
+		'Enter digit',
+		'Reveal all candidates',
+		'Crossout candidate',
+		'Add candidate',
+		'Bold candidate'
+	];
 
 	let displayedPanel = $state('Keypad');
 	let keypadMode: KeypadMode = $state('Enter digit');
@@ -138,6 +145,13 @@
 	}
 
 	function handleModifierKeyDown(event: KeyboardEvent) {
+		if (event.code === 'Space') {
+			event.preventDefault();
+			if (!event.repeat) {
+				const nextModeIndex = (keypadModes.indexOf(keypadMode) + 1) % keypadModes.length;
+				keypadMode = keypadModes[nextModeIndex];
+			}
+		}
 		if (event.key === 'Shift') shiftHeld = true;
 		if (event.key === 'Control') controlHeld = true;
 	}
