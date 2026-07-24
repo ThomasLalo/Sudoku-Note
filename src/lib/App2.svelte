@@ -23,6 +23,7 @@
 		| 'Crossout candidate'
 		| 'Add candidate'
 		| 'Bold candidate';
+	type NumberInputSource = 'keyboard' | 'pointer';
 	const keypadModes: KeypadMode[] = [
 		'Enter digit',
 		'Reveal all candidates',
@@ -42,6 +43,7 @@
 	});
 	let revealedNumber: number | null = $state(null);
 	let flippedNotes = $state(false);
+	let returnToRevealAfterEdits = $state(true);
 	let multiSelect = $state(false);
 	let gridState: Cell[][] = $state(initializeGrid());
 	let selectedCells: Cell[] = $state([]);
@@ -115,22 +117,25 @@
 		recalculateCandidates(affectedCells);
 	}
 
-	function handleKeypadNumber(fillValue: number) {
-		if (activeKeypadMode === 'Enter digit') {
+	function handleKeypadNumber(fillValue: number, inputSource: NumberInputSource = 'keyboard') {
+		const modeAtAction = activeKeypadMode;
+		const hasSelectedCells = selectedCells.length > 0;
+
+		if (modeAtAction === 'Enter digit') {
 			for (const cell of selectedCells) {
 				fillCell(cell, fillValue);
 			}
-		} else if (activeKeypadMode === 'Crossout candidate') {
+		} else if (modeAtAction === 'Crossout candidate') {
 			const candidateIndex = keypadInts.indexOf(fillValue);
 			for (const cell of selectedCells) {
 				cell.crossedOutCandidates[candidateIndex] = true;
 			}
-		} else if (activeKeypadMode === 'Bold candidate') {
+		} else if (modeAtAction === 'Bold candidate') {
 			const candidateIndex = keypadInts.indexOf(fillValue);
 			for (const cell of selectedCells) {
 				cell.boldCandidates[candidateIndex] = true;
 			}
-		} else if (activeKeypadMode === 'Add candidate') {
+		} else if (modeAtAction === 'Add candidate') {
 			const candidateIndex = keypadInts.indexOf(fillValue);
 			for (const cell of selectedCells) {
 				if (cell.fillNumber !== null) continue;
@@ -141,8 +146,20 @@
 					cell.manuallyAddedCandidates[candidateIndex] = true;
 				}
 			}
-		} else if (activeKeypadMode === 'Reveal all candidates') {
+		} else if (modeAtAction === 'Reveal all candidates') {
 			revealedNumber = fillValue;
+		}
+
+		const shouldReturnToReveal =
+			returnToRevealAfterEdits &&
+			inputSource === 'pointer' &&
+			hasSelectedCells &&
+			!shiftHeld &&
+			!controlHeld &&
+			(modeAtAction === 'Enter digit' || modeAtAction === 'Crossout candidate');
+		if (shouldReturnToReveal) {
+			revealedNumber = fillValue;
+			keypadMode = 'Reveal all candidates';
 		}
 	}
 
@@ -172,6 +189,10 @@
 		flippedNotes = !flippedNotes;
 	}
 
+	function toggleReturnToRevealAfterEdits() {
+		returnToRevealAfterEdits = !returnToRevealAfterEdits;
+	}
+
 	let keypadStrings = $derived(
 		(flippedNotes ? flippedKeypadInts : keypadInts).map((number) => String(number))
 	);
@@ -197,11 +218,16 @@
 						in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat
 						cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum
 					</p>
-					<div class="note-layout-switch">
+					<div class="settings-switches">
 						<TextSwitch
 							label="Flipped notes"
 							onchangeHandler={toggleNoteLayout}
 							binder={flippedNotes}
+						/>
+						<TextSwitch
+							label="Return to Reveal after edits"
+							onchangeHandler={toggleReturnToRevealAfterEdits}
+							binder={returnToRevealAfterEdits}
 						/>
 					</div>
 				</div>
@@ -235,7 +261,11 @@
 							<KeypadButton
 								label={num}
 								color="primary"
-								onchangeHandler={() => handleKeypadNumber(Number(num))}
+								onchangeHandler={(event) =>
+									handleKeypadNumber(
+										Number(num),
+										event.detail === 0 ? 'keyboard' : 'pointer'
+									)}
 							/>
 						{/each}
 						<KeypadButton
@@ -357,7 +387,11 @@
 		border: var(--panel-face-border-size) solid var(--color-secondary-light);
 	}
 
-	.note-layout-switch {
+	.settings-switches {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 1rem;
 		margin-top: 1rem;
 	}
 
@@ -369,8 +403,7 @@
 		padding-bottom: calc(0.5vw + var(--button-border-width));
 	}
 
-	.left-panel h1,
-	.right-panel h1 {
+	.left-panel h1 {
 		margin-bottom: 1rem;
 	}
 

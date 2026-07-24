@@ -14,7 +14,7 @@
 	}: {
 		label: string;
 		color: string;
-		onchangeHandler?: () => void;
+		onchangeHandler?: (event: MouseEvent) => void;
 		toggle?: boolean;
 		checkbox?: boolean;
 		binder?: string;
@@ -23,8 +23,8 @@
 		children?: Snippet;
 	} = $props();
 
-	function handleChange() {
-		onchangeHandler();
+	function handleChange(event: MouseEvent) {
+		onchangeHandler(event);
 	}
 
 	function handleModeChange() {

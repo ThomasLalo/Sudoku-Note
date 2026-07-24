@@ -131,7 +131,7 @@ test('multi-select toggles cells and keeps each drag add-only or remove-only', a
 	await expect(page.locator('.cell-background.selected')).toHaveCount(1);
 });
 
-test('fills every selected cell from the keypad in write mode', async ({ page }) => {
+test('fills every selected cell from the keypad and returns to reveal', async ({ page }) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
 	await waitForGridHydration(page);
@@ -146,6 +146,55 @@ test('fills every selected cell from the keypad in write mode', async ({ page })
 
 	await expect(cells.nth(0).locator('.value')).toHaveText('3');
 	await expect(cells.nth(10).locator('.value')).toHaveText('3');
+	await expect(page.getByLabel('Reveal all candidates')).toBeChecked();
+	await expect(page.locator('.cell-background.selected')).toHaveCount(2);
+	await expect(cells.nth(0).locator('.value')).toHaveClass(/value-revealed/);
+});
+
+test('keeps edit tools sticky when return to reveal is disabled', async ({ page }) => {
+	await page.setViewportSize({ width: 1920, height: 1080 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const returnSetting = page.getByLabel('Return to Reveal after edits');
+	await expect(returnSetting).toBeChecked();
+	await page.locator('label').filter({ hasText: 'Return to Reveal after edits' }).click();
+	await expect(returnSetting).not.toBeChecked();
+
+	await page.locator('.sudoku-cell').first().click();
+	await page.getByRole('button', { name: '3', exact: true }).click();
+	await expect(page.getByLabel('Enter digit')).toBeChecked();
+});
+
+test('does not return to reveal for keyboard number input or keyboard button activation', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cells = page.locator('.sudoku-cell');
+	await cells.nth(0).click();
+	await page.keyboard.press('3');
+	await expect(page.getByLabel('Enter digit')).toBeChecked();
+	await expect(cells.nth(0).locator('.value')).toHaveText('3');
+
+	await cells.nth(1).click();
+	const fourButton = page.getByRole('button', { name: '4', exact: true });
+	await fourButton.focus();
+	await page.keyboard.press('Enter');
+	await expect(page.getByLabel('Enter digit')).toBeChecked();
+	await expect(cells.nth(1).locator('.value')).toHaveText('4');
+});
+
+test('does not return to reveal when a pointer edit has no selected cells', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	await page.getByRole('button', { name: '3', exact: true }).click();
+	await expect(page.getByLabel('Enter digit')).toBeChecked();
+	await expect(page.locator('.sudoku-cell .value')).toHaveCount(0);
 });
 
 test('marks duplicate filled digits that see each other as conflicts', async ({ page }) => {
@@ -160,7 +209,7 @@ test('marks duplicate filled digits that see each other as conflicts', async ({ 
 
 	for (const cellIndex of conflictingIndexes) {
 		await cells.nth(cellIndex).click();
-		await page.getByRole('button', { name: '3', exact: true }).click();
+		await page.keyboard.press('3');
 	}
 
 	for (const cellIndex of conflictingIndexes) {
@@ -203,7 +252,7 @@ test('reveals matching filled digits and uncrossed candidates from the keypad', 
 	const cells = page.locator('.sudoku-cell');
 	for (const cellIndex of [0, 40]) {
 		await cells.nth(cellIndex).click();
-		await page.getByRole('button', { name: '4', exact: true }).click();
+		await page.keyboard.press('4');
 	}
 
 	await cells.nth(80).click();
@@ -225,7 +274,7 @@ test('reveals matching filled digits and uncrossed candidates from the keypad', 
 		'background-color',
 		await page.locator('body').evaluate((body) => {
 			const probe = document.createElement('span');
-			probe.style.backgroundColor = 'var(--color-background)';
+			probe.style.backgroundColor = 'var(--color-background-dark)';
 			body.append(probe);
 			const color = getComputedStyle(probe).backgroundColor;
 			probe.remove();
@@ -300,9 +349,9 @@ test('recalculates visible candidates when a filled value is deleted', async ({ 
 
 	const cells = page.locator('.sudoku-cell');
 	await cells.nth(0).click();
-	await page.getByRole('button', { name: '9', exact: true }).click();
+	await page.keyboard.press('9');
 	await cells.nth(1).click();
-	await page.getByRole('button', { name: '9', exact: true }).click();
+	await page.keyboard.press('9');
 
 	const stillBlockedCandidate = cells.nth(9).locator('[data-candidate="9"]');
 	const restoredCandidate = cells.nth(27).locator('[data-candidate="9"]');
@@ -353,11 +402,17 @@ test('crosses out a candidate in every selected cell from the keypad', async ({ 
 	const cells = page.locator('.sudoku-cell');
 	await expect(page.getByRole('button', { name: 'Delete digit' })).toBeVisible();
 	await expect(page.locator('.keypad input[type="radio"]')).toHaveCount(5);
-	await cells.nth(0).click();
-	await cells.nth(10).click({ modifiers: ['Shift'] });
 	await page.locator('.keypad label[title="Crossout candidate"]').click();
 	await expect(page.getByLabel('Crossout candidate')).toBeChecked();
+	await cells.nth(0).click();
+	await cells.nth(10).click({ modifiers: ['Shift'] });
+	await expect(page.getByLabel('Crossout candidate')).toBeChecked();
 	await page.getByRole('button', { name: '4', exact: true }).click();
+	await expect(page.getByLabel('Reveal all candidates')).toBeChecked();
+	await expect(page.locator('.cell-background.selected')).toHaveCount(2);
+	await expect(cells.nth(1).locator('[data-candidate="4"]')).toHaveClass(
+		/candidate-revealed/
+	);
 
 	for (const cellIndex of [0, 10]) {
 		const candidate = cells.nth(cellIndex).locator('[data-candidate="4"]');
@@ -485,6 +540,7 @@ test('bolds a candidate in every selected cell from the keypad', async ({ page }
 	await page.locator('.keypad label[title="Bold candidate"]').click();
 	await expect(page.getByLabel('Bold candidate')).toBeChecked();
 	await page.getByRole('button', { name: '4' }).click();
+	await expect(page.getByLabel('Bold candidate')).toBeChecked();
 
 	for (const cellIndex of [0, 1]) {
 		const candidate = cells.nth(cellIndex).locator('[data-candidate="4"]');
@@ -535,6 +591,7 @@ test('adds candidates from the keypad and restores their standard appearance', a
 	await cells.nth(1).click({ modifiers: ['Shift'] });
 	await page.locator('.keypad label[title="Add candidate"]').click();
 	await page.getByRole('button', { name: '4', exact: true }).click();
+	await expect(page.getByLabel('Add candidate')).toBeChecked();
 
 	for (const cellIndex of [0, 1]) {
 		const candidate = cells.nth(cellIndex).locator('[data-candidate="4"]');
@@ -609,6 +666,7 @@ test('renders crossed-out bold candidates like regular crossed-out candidates', 
 	await page.getByRole('button', { name: '2', exact: true }).click();
 
 	await cells.nth(1).click();
+	await page.locator('.keypad label[title="Crossout candidate"]').click();
 	await page.getByRole('button', { name: '2', exact: true }).click();
 
 	const boldCrossout = cells.nth(0).locator('[data-candidate="2"]');
