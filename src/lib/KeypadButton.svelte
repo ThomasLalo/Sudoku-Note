@@ -7,6 +7,7 @@
 		onchangeHandler = () => {},
 		toggle = false,
 		binder = $bindable(''),
+		activeBinder,
 		children
 	}: {
 		label: string;
@@ -14,6 +15,7 @@
 		onchangeHandler?: () => void;
 		toggle?: boolean;
 		binder?: string;
+		activeBinder?: string;
 		children?: Snippet;
 	} = $props();
 
@@ -25,14 +27,15 @@
 		binder = label;
 	}
 
-	const styleString = `
+	let effectiveBinder = $derived(activeBinder ?? binder);
+	let styleString = $derived(`
         --bottom-color: var(--color-${color}-dark-static);
         --right-color: var(--color-${color}-light-static);
         --highlight-color: var(--color-${color}-light);
         --highlight-color-dark: var(--color-${color}-dark);
         --box-height: calc(var(--size-font) + 1vmin);
         --box-width: calc(var(--size-font) + 1vmin);
-    `;
+    `);
 </script>
 
 {#if toggle}
@@ -55,7 +58,7 @@
 				name="keypad-mode"
 				value={label}
 				aria-label={label}
-				checked={binder === label}
+				checked={effectiveBinder === label}
 				onchange={handleModeChange}
 			/>
 			<div class="button-corner-square"></div>

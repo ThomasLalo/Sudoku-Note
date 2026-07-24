@@ -285,6 +285,71 @@ test('crosses out candidates from the keyboard without filling selected cells', 
 	await expect(cell.locator('[data-candidate="7"]')).toHaveClass(/candidate-crossed-out/);
 });
 
+test('temporarily uses crossout while Shift is held and keeps Shift multi-selection', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cells = page.locator('.sudoku-cell');
+	await cells.nth(0).click();
+	await page.locator('.keypad label[title="Bold candidate"]').click();
+
+	await page.keyboard.down('Shift');
+	await expect(page.getByLabel('Crossout candidate')).toBeChecked();
+	await cells.nth(10).click();
+	await expect(page.locator('.cell-background.selected')).toHaveCount(2);
+	await page.evaluate(() => {
+		window.dispatchEvent(
+			new KeyboardEvent('keydown', {
+				key: '&',
+				code: 'Digit7',
+				shiftKey: true
+			})
+		);
+	});
+
+	for (const cellIndex of [0, 10]) {
+		await expect(cells.nth(cellIndex).locator('[data-candidate="7"]')).toHaveClass(
+			/candidate-crossed-out/
+		);
+	}
+
+	await page.keyboard.up('Shift');
+	await expect(page.getByLabel('Bold candidate')).toBeChecked();
+	await page.keyboard.press('8');
+	for (const cellIndex of [0, 10]) {
+		await expect(cells.nth(cellIndex).locator('[data-candidate="8"]')).toHaveClass(
+			/candidate-bold/
+		);
+	}
+});
+
+test('temporarily fills digits while Control is held and restores the previous tool', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cells = page.locator('.sudoku-cell');
+	await cells.nth(0).click();
+	await page.locator('.keypad label[title="Crossout candidate"]').click();
+
+	await page.keyboard.down('Control');
+	await expect(page.getByLabel('Enter digit')).toBeChecked();
+	await page.keyboard.press('4');
+	await expect(cells.nth(0).locator('.value')).toHaveText('4');
+
+	await page.keyboard.up('Control');
+	await expect(page.getByLabel('Crossout candidate')).toBeChecked();
+	await cells.nth(1).click();
+	await page.keyboard.press('5');
+	await expect(cells.nth(1).locator('[data-candidate="5"]')).toHaveClass(/candidate-crossed-out/);
+	await expect(cells.nth(1).locator('.value')).toHaveCount(0);
+});
+
 test('bolds a candidate in every selected cell from the keypad', async ({ page }) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });

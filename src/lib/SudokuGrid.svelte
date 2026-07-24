@@ -169,8 +169,10 @@
             }
         }
 
-        if (['1','2','3','4','5','6','7','8','9'].includes(event.key)) {
-            handleNumberInput(Number(event.key));
+        const numberKeyMatch = /^(?:Digit|Numpad)([1-9])$/.exec(event.code);
+        const numberInput = numberKeyMatch?.[1] ?? (/^[1-9]$/.test(event.key) ? event.key : null);
+        if (numberInput !== null) {
+            handleNumberInput(Number(numberInput));
         }
 
         if (['Backspace','Delete'].includes(event.key)) {
@@ -189,7 +191,7 @@
 
 <div class="sudoku-grid" bind:this={gridElement}>
     <div class="grid-layer cell-background-layer" aria-hidden="true">
-        {#each gridStateRows as row}
+        {#each gridStateRows as row (row[0].rowNumber0based)}
             {#each row as cell (cell.boxNumber + "-" + cell.positionInBox)}
                 <div
                     class="cell-background"
@@ -207,7 +209,7 @@
     <svg class="grid-layer variant-layer" viewBox="0 0 9 9" preserveAspectRatio="none" aria-hidden="true"></svg>
 
     <svg class="grid-layer selection-layer" aria-hidden="true">
-        {#each gridStateRows as row}
+        {#each gridStateRows as row (row[0].rowNumber0based)}
             {#each row as cell (cell.boxNumber + "-" + cell.positionInBox)}
                 {@const cellRow = cell.rowNumber0based}
                 {@const cellCol = cell.colNumber0based}
@@ -307,7 +309,7 @@
     </svg>
 
     <svg class="grid-layer grid-line-layer" viewBox="0 0 9 9" preserveAspectRatio="none" aria-hidden="true">
-        {#each innerGridLines as line}
+        {#each innerGridLines as line (line)}
             <line class="grid-line" class:box-line={line % 3 === 0} x1={line} y1="0" x2={line} y2="9"></line>
             <line class="grid-line" class:box-line={line % 3 === 0} x1="0" y1={line} x2="9" y2={line}></line>
         {/each}
@@ -315,7 +317,7 @@
     </svg>
 
     <div class="grid-layer cell-content-layer">
-        {#each gridStateRows as row}
+        {#each gridStateRows as row (row[0].rowNumber0based)}
             {#each row as cell (cell.boxNumber + "-" + cell.positionInBox)}
                 <!-- Keyboard interaction uses the grid's selection state through the window keydown handler. -->
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -339,7 +341,7 @@
                         </div>
                     {:else}
                         <div class="candidate-grid">
-                            {#each candidateInts as num}
+                            {#each candidateInts as num (num)}
 								{@const candidateIndex = keypadInts.indexOf(num)}
 								{@const candidateVisible = cell.candidates[candidateIndex] || cell.manuallyAddedCandidates[candidateIndex]}
 								{@const candidateInvalid = cell.manuallyAddedCandidates[candidateIndex] && !cell.candidates[candidateIndex]}

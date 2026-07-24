@@ -16,9 +16,22 @@
 	const keypadInts = [7, 8, 9, 4, 5, 6, 1, 2, 3];
 	const flippedKeypadInts = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 	const smallerThanDesktop = new MediaQuery('max-width: 1615px');
+	type KeypadMode =
+		| 'Enter digit'
+		| 'Reveal all candidates'
+		| 'Crossout candidate'
+		| 'Add candidate'
+		| 'Bold candidate';
 
 	let displayedPanel = $state('Keypad');
-	let keypadMode = $state('Enter digit');
+	let keypadMode: KeypadMode = $state('Enter digit');
+	let shiftHeld = $state(false);
+	let controlHeld = $state(false);
+	let activeKeypadMode = $derived.by<KeypadMode>(() => {
+		if (controlHeld) return 'Enter digit';
+		if (shiftHeld) return 'Crossout candidate';
+		return keypadMode;
+	});
 	let revealedNumber: number | null = $state(null);
 	let flippedNotes = $state(false);
 	let gridState: Cell[][] = $state(initializeGrid());
@@ -94,21 +107,21 @@
 	}
 
 	function handleKeypadNumber(fillValue: number) {
-		if (keypadMode === 'Enter digit') {
+		if (activeKeypadMode === 'Enter digit') {
 			for (const cell of selectedCells) {
 				fillCell(cell, fillValue);
 			}
-		} else if (keypadMode === 'Crossout candidate') {
+		} else if (activeKeypadMode === 'Crossout candidate') {
 			const candidateIndex = keypadInts.indexOf(fillValue);
 			for (const cell of selectedCells) {
 				cell.crossedOutCandidates[candidateIndex] = true;
 			}
-		} else if (keypadMode === 'Bold candidate') {
+		} else if (activeKeypadMode === 'Bold candidate') {
 			const candidateIndex = keypadInts.indexOf(fillValue);
 			for (const cell of selectedCells) {
 				cell.boldCandidates[candidateIndex] = true;
 			}
-		} else if (keypadMode === 'Add candidate') {
+		} else if (activeKeypadMode === 'Add candidate') {
 			const candidateIndex = keypadInts.indexOf(fillValue);
 			for (const cell of selectedCells) {
 				if (cell.fillNumber !== null) continue;
@@ -119,9 +132,24 @@
 					cell.manuallyAddedCandidates[candidateIndex] = true;
 				}
 			}
-		} else if (keypadMode === 'Reveal all candidates') {
+		} else if (activeKeypadMode === 'Reveal all candidates') {
 			revealedNumber = fillValue;
 		}
+	}
+
+	function handleModifierKeyDown(event: KeyboardEvent) {
+		if (event.key === 'Shift') shiftHeld = true;
+		if (event.key === 'Control') controlHeld = true;
+	}
+
+	function handleModifierKeyUp(event: KeyboardEvent) {
+		if (event.key === 'Shift') shiftHeld = false;
+		if (event.key === 'Control') controlHeld = false;
+	}
+
+	function clearHeldModifiers() {
+		shiftHeld = false;
+		controlHeld = false;
 	}
 
 	function toggleNoteLayout() {
@@ -133,6 +161,12 @@
 	);
 	const panelLabels = ['Keypad', 'Info'];
 </script>
+
+<svelte:window
+	onkeydown={handleModifierKeyDown}
+	onkeyup={handleModifierKeyUp}
+	onblur={clearHeldModifiers}
+/>
 
 <div class="app-container">
 	{#if displayedPanel === 'Info' || !smallerThanDesktop.current}
@@ -167,7 +201,7 @@
 				bind:selectedCells
 				bind:lastSelected
 				{flippedNotes}
-				revealedNumber={keypadMode === 'Reveal all candidates' ? revealedNumber : null}
+				revealedNumber={activeKeypadMode === 'Reveal all candidates' ? revealedNumber : null}
 				{clearCells}
 				handleNumberInput={handleKeypadNumber}
 			/>
@@ -194,7 +228,13 @@
 						>
 							<Delete />
 						</KeypadButton>
-						<KeypadButton label="Enter digit" color="text" toggle bind:binder={keypadMode}>
+						<KeypadButton
+							label="Enter digit"
+							color="text"
+							toggle
+							bind:binder={keypadMode}
+							activeBinder={activeKeypadMode}
+						>
 							<SquareArrowRight />
 						</KeypadButton>
 						<KeypadButton
@@ -202,6 +242,7 @@
 							color="accent"
 							toggle
 							bind:binder={keypadMode}
+							activeBinder={activeKeypadMode}
 						>
 							<Spotlight />
 						</KeypadButton>
@@ -210,13 +251,26 @@
 							color="secondary"
 							toggle
 							bind:binder={keypadMode}
+							activeBinder={activeKeypadMode}
 						>
 							<PencilOff />
 						</KeypadButton>
-						<KeypadButton label="Add candidate" color="text" toggle bind:binder={keypadMode}>
+						<KeypadButton
+							label="Add candidate"
+							color="text"
+							toggle
+							bind:binder={keypadMode}
+							activeBinder={activeKeypadMode}
+						>
 							<Pencil />
 						</KeypadButton>
-						<KeypadButton label="Bold candidate" color="accent" toggle bind:binder={keypadMode}>
+						<KeypadButton
+							label="Bold candidate"
+							color="accent"
+							toggle
+							bind:binder={keypadMode}
+							activeBinder={activeKeypadMode}
+						>
 							<Highlighter />
 						</KeypadButton>
 					</div>
