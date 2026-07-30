@@ -61,22 +61,22 @@
 	.right-parallelogram {
 		position: absolute;
 		width: var(--diagonal-length);
-		height: calc(100% - 1px);
+		height: 100%;
 		transform: skew(0, 45deg);
 		transform-origin: left top;
 		left: 100%;
-		top: 1px;
+		top: 0;
 		box-shadow: inset 0 -1px var(--right-color); // fixes gap between rectangles caused by anti-aliasing
 	}
 
 	.bottom-parallelogram {
 		position: absolute;
-		width: calc(100% - 1px);
+		width: 100%;
 		height: var(--diagonal-length);
 		transform: skew(45deg);
 		transform-origin: left top;
 		top: 100%;
-		left: 1px;
+		left: 0;
 		box-shadow: inset -1px 0 var(--bottom-color);
 	}
 
@@ -84,8 +84,8 @@
 		position: absolute;
 		top: 100%;
 		left: 100%;
-		width: calc(var(--diagonal-length) - 1px);
-		height: calc(var(--diagonal-length) - 1px);
+		width: var(--diagonal-length);
+		height: var(--diagonal-length);
 		pointer-events: none;
 	}
 

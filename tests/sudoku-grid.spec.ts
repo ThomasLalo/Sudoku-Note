@@ -316,6 +316,64 @@ test('reveals a number from the keyboard without requiring a selected cell', asy
 	await expect(page.locator('.cell-background.selected')).toHaveCount(0);
 });
 
+test('scales filled values with the Sudoku cells on mobile', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cell = page.locator('.sudoku-cell').first();
+	await cell.click();
+	await page.keyboard.press('9');
+
+	const mobileCellBounds = await cell.boundingBox();
+	const mobileFontSize = await cell
+		.locator('.value')
+		.evaluate((value) => Number.parseFloat(getComputedStyle(value).fontSize));
+
+	expect(mobileCellBounds).not.toBeNull();
+	expect(mobileFontSize).toBeLessThan((mobileCellBounds?.height ?? 0) * 0.8);
+
+	await page.setViewportSize({ width: 1400, height: 1000 });
+
+	const desktopCellBounds = await cell.boundingBox();
+	const desktopFontSize = await cell
+		.locator('.value')
+		.evaluate((value) => Number.parseFloat(getComputedStyle(value).fontSize));
+
+	expect(desktopCellBounds).not.toBeNull();
+	expect(desktopFontSize).toBeGreaterThan(mobileFontSize);
+	expect(desktopFontSize / (desktopCellBounds?.height ?? 1)).toBeCloseTo(
+		mobileFontSize / (mobileCellBounds?.height ?? 1),
+		1
+	);
+});
+
+test('keeps mobile grid lines consistent and candidates clear of cell borders', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const gridLineWidths = await page.locator('.sudoku-grid').evaluate((grid) => {
+		const styles = getComputedStyle(grid);
+		return {
+			cell: styles.getPropertyValue('--cell-border-size').trim(),
+			box: styles.getPropertyValue('--box-border-size').trim()
+		};
+	});
+	expect(gridLineWidths).toEqual({ cell: '1px', box: '3px' });
+
+	const topCandidateClearances = await page.locator('.sudoku-cell').evaluateAll((cells) =>
+		cells.map((cell) => {
+			const candidate = cell.querySelector<HTMLElement>('[data-candidate="7"] .candidate-text');
+			if (!candidate) return 0;
+			return candidate.getBoundingClientRect().top - cell.getBoundingClientRect().top;
+		})
+	);
+	expect(Math.min(...topCandidateClearances)).toBeGreaterThan(2);
+});
+
 test('hides eliminated candidates without shifting the remaining candidates', async ({ page }) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -743,8 +801,8 @@ test('captures the isometric border entry corners', async ({ page }, testInfo) =
 	if (!bounds) return;
 
 	const border = page.locator('.isometric-container').first();
-	await expect(border.locator('.right-parallelogram')).toHaveCSS('top', '1px');
-	await expect(border.locator('.bottom-parallelogram')).toHaveCSS('left', '1px');
+	await expect(border.locator('.right-parallelogram')).toHaveCSS('top', '0px');
+	await expect(border.locator('.bottom-parallelogram')).toHaveCSS('left', '0px');
 
 	await page.screenshot({
 		path: testInfo.outputPath('isometric-top-right.png'),
@@ -765,14 +823,36 @@ test('captures the isometric border entry corners', async ({ page }, testInfo) =
 	});
 });
 
-test('keeps the isometric correction at the mobile border size', async ({ page }) => {
+test('aligns panel and button isometric edges at the mobile size', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
 	await waitForGridHydration(page);
 
 	const border = page.locator('.isometric-container').first();
-	await expect(border.locator('.right-parallelogram')).toHaveCSS('top', '1px');
-	await expect(border.locator('.bottom-parallelogram')).toHaveCSS('left', '1px');
+	await expect(border.locator('.right-parallelogram')).toHaveCSS('top', '0px');
+	await expect(border.locator('.bottom-parallelogram')).toHaveCSS('left', '0px');
+
+	const buttonGeometry = await page
+		.getByRole('button', { name: '7', exact: true })
+		.evaluate((button) => {
+			const face = button.querySelector<HTMLElement>('.button-face');
+			const right = button.querySelector<HTMLElement>('.button-right-parallelogram');
+			const corner = button.querySelector<HTMLElement>('.button-corner-square');
+			if (!face || !right || !corner) return null;
+
+			return {
+				faceHeight: face.offsetHeight,
+				rightHeight: right.offsetHeight,
+				rightWidth: right.offsetWidth,
+				cornerHeight: corner.offsetHeight,
+				cornerWidth: corner.offsetWidth
+			};
+		});
+
+	expect(buttonGeometry).not.toBeNull();
+	expect(buttonGeometry?.rightHeight).toBe(buttonGeometry?.faceHeight);
+	expect(buttonGeometry?.cornerHeight).toBe(buttonGeometry?.rightWidth);
+	expect(buttonGeometry?.cornerWidth).toBe(buttonGeometry?.rightWidth);
 });
 
 test('uses even spacing above and below the grid on desktop', async ({ page }) => {

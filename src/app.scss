@@ -234,10 +234,7 @@ $color-variants: (
 	background-color: var(--right-color);
 
 	width: var(--diagonal-length);
-	// height:var(--box-height);
-	height: calc(
-		var(--box-height) - 0.5px
-	); // taking off this one pixel fixes minor rendering artifacts from showing up sometimes
+	height: var(--box-height);
 
 	position: absolute;
 	left: 100%;
@@ -289,8 +286,8 @@ $color-variants: (
 	position: absolute;
 	top: 100%;
 	left: 100%;
-	height: calc(var(--diagonal-length) - 1px); // the edges are visible without the -1s
-	width: calc(var(--diagonal-length) - 1px);
+	height: var(--diagonal-length);
+	width: var(--diagonal-length);
 	background-color: var(--right-color);
 }
 

@@ -465,6 +465,7 @@
 	.sudoku-grid {
 		position: relative;
 		isolation: isolate;
+		container-type: inline-size;
 		--cell-border-size: 2px;
 		--half-cell-border-size: 1px;
 		--box-border-size: 5px;
@@ -634,7 +635,7 @@
 	}
 
 	.value {
-		font-size: 4rem;
+		font-size: 7cqi;
 	}
 
 	.value-revealed {
@@ -648,6 +649,7 @@
 	.candidate-grid {
 		width: 100%;
 		height: 100%;
+		padding-block: 0.5cqi;
 		display: grid;
 		grid-template: 1fr 1fr 1fr / 1fr 1fr 1fr;
 	}
@@ -656,6 +658,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		line-height: 1;
 	}
 
 	.candidate-crossed-out {
@@ -714,10 +717,10 @@
 
 	@media (max-width: 450px) or (max-height: 680px) {
 		.sudoku-grid {
-			--cell-border-size: 0.1rem;
-			--half-cell-border-size: 0.05rem;
-			--box-border-size: 0.2rem;
-			--half-box-border-size: 0.1rem;
+			--cell-border-size: 1px;
+			--half-cell-border-size: 0.5px;
+			--box-border-size: 3px;
+			--half-box-border-size: 1.5px;
 		}
 	}
 </style>
