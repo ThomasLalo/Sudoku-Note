@@ -452,6 +452,41 @@ test('switches notes and keypad between standard and flipped layouts', async ({ 
 	expect(await getKeypadOrder()).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
 });
 
+test('uses the five-column keypad layout below the grid', async ({ page }) => {
+	await page.setViewportSize({ width: 880, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const position = async (title: string) => {
+		const box = await page.locator(`[title="${title}"]`).boundingBox();
+		expect(box).not.toBeNull();
+		return box!;
+	};
+	const seven = await position('7');
+	const four = await position('4');
+	const one = await position('1');
+	const deleteDigit = await position('Delete digit');
+	const enterDigit = await position('Enter digit');
+	const reveal = await position('Reveal all candidates');
+	const crossout = await position('Crossout candidate');
+	const add = await position('Add candidate');
+	const bold = await position('Bold candidate');
+	const multiSelect = await position('Multi-select');
+
+	expect(deleteDigit.y).toBeCloseTo(seven.y);
+	expect(crossout.y).toBeCloseTo(seven.y);
+	expect(enterDigit.y).toBeCloseTo(four.y);
+	expect(add.y).toBeCloseTo(four.y);
+	expect(reveal.y).toBeCloseTo(one.y);
+	expect(bold.y).toBeCloseTo(one.y);
+	expect(enterDigit.x).toBeCloseTo(deleteDigit.x);
+	expect(reveal.x).toBeCloseTo(deleteDigit.x);
+	expect(add.x).toBeCloseTo(crossout.x);
+	expect(bold.x).toBeCloseTo(crossout.x);
+	expect(multiSelect.x).toBeCloseTo(seven.x);
+	expect(multiSelect.y).toBeGreaterThan(one.y);
+});
+
 test('crosses out a candidate in every selected cell from the keypad', async ({ page }) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });

@@ -257,69 +257,73 @@
 				<div class="keypad-content bg-background-lightest">
 					<!-- <h1 class="text-primary cascadia-code">Keypad</h1> -->
 					<div class="keypad">
-						{#each keypadStrings as num (num)}
+						<div class="number-keypad">
+							{#each keypadStrings as num (num)}
+								<KeypadButton
+									label={num}
+									color="primary"
+									onchangeHandler={(event) =>
+										handleKeypadNumber(
+											Number(num),
+											event.detail === 0 ? 'keyboard' : 'pointer'
+										)}
+								/>
+							{/each}
+						</div>
+						<div class="tool-keypad">
 							<KeypadButton
-								label={num}
-								color="primary"
-								onchangeHandler={(event) =>
-									handleKeypadNumber(
-										Number(num),
-										event.detail === 0 ? 'keyboard' : 'pointer'
-									)}
-							/>
-						{/each}
-						<KeypadButton
-							label="Delete digit"
-							color="secondary"
-							onchangeHandler={() => clearCells(selectedCells)}
-						>
-							<Delete />
-						</KeypadButton>
-						<KeypadButton
-							label="Enter digit"
-							color="text"
-							toggle
-							bind:binder={keypadMode}
-							activeBinder={activeKeypadMode}
-						>
-							<SquareArrowRight />
-						</KeypadButton>
-						<KeypadButton
-							label="Reveal all candidates"
-							color="accent"
-							toggle
-							bind:binder={keypadMode}
-							activeBinder={activeKeypadMode}
-						>
-							<Spotlight />
-						</KeypadButton>
-						<KeypadButton
-							label="Crossout candidate"
-							color="secondary"
-							toggle
-							bind:binder={keypadMode}
-							activeBinder={activeKeypadMode}
-						>
-							<PencilOff />
-						</KeypadButton>
-						<KeypadButton
-							label="Add candidate"
-							color="text"
-							toggle
-							bind:binder={keypadMode}
-							activeBinder={activeKeypadMode}
-						>
-							<Pencil />
-						</KeypadButton>
-						<KeypadButton
-							label="Bold candidate"
-							color="accent"
-							toggle
-							bind:binder={keypadMode}
-							activeBinder={activeKeypadMode}
-						>
-							<Highlighter />
-						</KeypadButton>
+								label="Delete digit"
+								color="secondary"
+								onchangeHandler={() => clearCells(selectedCells)}
+							>
+								<Delete />
+							</KeypadButton>
+							<KeypadButton
+								label="Enter digit"
+								color="text"
+								toggle
+								bind:binder={keypadMode}
+								activeBinder={activeKeypadMode}
+							>
+								<SquareArrowRight />
+							</KeypadButton>
+							<KeypadButton
+								label="Reveal all candidates"
+								color="accent"
+								toggle
+								bind:binder={keypadMode}
+								activeBinder={activeKeypadMode}
+							>
+								<Spotlight />
+							</KeypadButton>
+							<KeypadButton
+								label="Crossout candidate"
+								color="secondary"
+								toggle
+								bind:binder={keypadMode}
+								activeBinder={activeKeypadMode}
+							>
+								<PencilOff />
+							</KeypadButton>
+							<KeypadButton
+								label="Add candidate"
+								color="text"
+								toggle
+								bind:binder={keypadMode}
+								activeBinder={activeKeypadMode}
+							>
+								<Pencil />
+							</KeypadButton>
+							<KeypadButton
+								label="Bold candidate"
+								color="accent"
+								toggle
+								bind:binder={keypadMode}
+								activeBinder={activeKeypadMode}
+							>
+								<Highlighter />
+							</KeypadButton>
+						</div>
 					</div>
 					<div class="keypad secondary-keypad">
 						<KeypadButton label="Multi-select" color="accent" checkbox bind:checked={multiSelect}>
@@ -413,6 +417,11 @@
 		gap: 1rem;
 	}
 
+	.number-keypad,
+	.tool-keypad {
+		display: contents;
+	}
+
 	.secondary-keypad {
 		margin-top: calc(1rem + var(--button-border-width));
 	}
@@ -490,6 +499,26 @@
 		}
 		.layout-button-container {
 			margin-top: 1rem;
+		}
+	}
+
+	// The keypad is below the grid in this range. Arrange it as five columns by four rows.
+	@media (max-width: 900px) and (min-height: 391px) {
+		.keypad {
+			grid-template-columns: max-content max-content;
+		}
+
+		.number-keypad {
+			display: grid;
+			grid-template-columns: repeat(3, max-content);
+			gap: 1rem;
+		}
+
+		.tool-keypad {
+			display: grid;
+			grid-template-rows: repeat(3, max-content);
+			grid-auto-flow: column;
+			gap: 1rem;
 		}
 	}
 
