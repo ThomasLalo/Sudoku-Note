@@ -130,29 +130,4 @@
 		width: 65%;
 		height: 65%;
 	}
-
-	.button-isometric-container {
-		--size-font: 4rem;
-	}
-	// @media (max-aspect-ratio: 1/1) {
-	//     .button-isometric-container{
-	//         --size-font: 2rem;
-	//     }
-	// }
-	@media (max-width: 1214px) {
-		// phone portrait
-		.button-isometric-container {
-			--size-font: 2rem;
-		}
-	}
-	@media (max-width: 900px) {
-		.button-isometric-container {
-			--size-font: 4rem;
-		}
-	}
-	@media (max-height: 680px) {
-		.button-isometric-container {
-			--size-font: 2rem;
-		}
-	}
 </style>

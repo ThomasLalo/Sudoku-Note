@@ -11,12 +11,16 @@
 	import Spotlight from '@lucide/svelte/icons/spotlight';
 	import SquareArrowRight from '@lucide/svelte/icons/square-arrow-right';
 	import Grid2x2Plus from '@lucide/svelte/icons/grid-2x2-plus';
-	import { MediaQuery } from 'svelte/reactivity';
+	import { onMount } from 'svelte';
 	import type { Cell } from './gridUtils';
 	import { initializeGrid, getAdjacentCell } from './gridUtils';
 	const keypadInts = [7, 8, 9, 4, 5, 6, 1, 2, 3];
 	const flippedKeypadInts = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-	const smallerThanDesktop = new MediaQuery('max-width: 1615px');
+	type LayoutMode = 'wide' | 'side' | 'stacked';
+	const minimumKeySize = 32;
+	const preferredKeySize = 64;
+	const minimumUsefulGridSize = 270;
+	const wideLayoutMinimumWidth = 1616;
 	type KeypadMode =
 		| 'Enter digit'
 		| 'Reveal all candidates'
@@ -33,6 +37,12 @@
 	];
 
 	let displayedPanel = $state('Keypad');
+	let appContainer: HTMLDivElement;
+	let layoutMode: LayoutMode = $state('stacked');
+	let gridSize = $state(300);
+	let keySize = $state(minimumKeySize);
+	let allowLayoutOverflow = $state(false);
+	let layoutStyle = $derived(`--grid-size: ${gridSize}px; --key-size: ${keySize}px;`);
 	let keypadMode: KeypadMode = $state('Enter digit');
 	let shiftHeld = $state(false);
 	let controlHeld = $state(false);
@@ -197,6 +207,109 @@
 		(flippedNotes ? flippedKeypadInts : keypadInts).map((number) => String(number))
 	);
 	const panelLabels = ['Keypad', 'Info'];
+
+	function cssPixels(value: string, fallback: number) {
+		const parsedValue = Number.parseFloat(value);
+		return Number.isFinite(parsedValue) ? parsedValue : fallback;
+	}
+
+	function updateResponsiveLayout() {
+		if (!appContainer) return;
+
+		const width = appContainer.clientWidth;
+		const height = appContainer.clientHeight;
+		if (width <= 0 || height <= 0) return;
+
+		const styles = getComputedStyle(appContainer);
+		const panelEdge = cssPixels(styles.getPropertyValue('--panel-border-width'), 8);
+		const buttonEdge = cssPixels(styles.getPropertyValue('--button-border-width'), 5);
+		const faceBorder = cssPixels(styles.getPropertyValue('--panel-face-border-size'), 4);
+		const sectionGap = cssPixels(styles.getPropertyValue('--section-gap'), 8);
+		const paddingLeft = cssPixels(styles.paddingLeft, 8);
+		const paddingRight = cssPixels(styles.paddingRight, 8 + panelEdge);
+		const bottomPadding = cssPixels(styles.paddingBottom, 8 + panelEdge);
+		const selectorHeight = cssPixels(styles.getPropertyValue('--text-control-height'), 24);
+
+		const contentWidth = width - paddingLeft - paddingRight;
+		const sideColumnGap = panelEdge + sectionGap;
+		const clampKeySize = (...capacities: number[]) =>
+			Math.max(minimumKeySize, Math.min(preferredKeySize, ...capacities));
+
+		const sideWidthWithoutKeys = sideColumnGap + 7 * buttonEdge + 2 * faceBorder;
+		const sideHeightWithoutKeys =
+			selectorHeight + 14 * buttonEdge + sectionGap + 2 * faceBorder + bottomPadding;
+		const sideLayout = {
+			gridAt: (size: number) =>
+				Math.min(height - bottomPadding, contentWidth - sideWidthWithoutKeys - 3 * size),
+			fits: (size: number) => sideHeightWithoutKeys + 6 * size <= height,
+			keyCapacityAt: (boardSize: number) =>
+				Math.min(
+					(contentWidth - boardSize - sideWidthWithoutKeys) / 3,
+					(height - sideHeightWithoutKeys) / 6
+				)
+		};
+
+		const stackedWidthWithoutKeys = 13 * buttonEdge + 2 * faceBorder;
+		const stackedHeightWithoutKeys =
+			selectorHeight + panelEdge + 2 * sectionGap + 8 * buttonEdge + 2 * faceBorder + bottomPadding;
+		const stackedLayout = {
+			gridAt: (size: number) =>
+				Math.min(contentWidth, height - stackedHeightWithoutKeys - 3 * size),
+			fits: (size: number) => stackedWidthWithoutKeys + 6 * size <= contentWidth,
+			keyCapacityAt: (boardSize: number) =>
+				Math.min(
+					(contentWidth - stackedWidthWithoutKeys) / 6,
+					(height - boardSize - stackedHeightWithoutKeys) / 3
+				)
+		};
+
+		if (width >= wideLayoutMinimumWidth) {
+			const wideWidthWithoutKeys = 2 * sideColumnGap + 2 * (7 * buttonEdge + 2 * faceBorder);
+			const wideGridAt = (size: number) =>
+				Math.min(height - bottomPadding, contentWidth - wideWidthWithoutKeys - 6 * size);
+			const gridAtMinimumKeys = wideGridAt(minimumKeySize);
+
+			layoutMode = 'wide';
+			keySize = clampKeySize(
+				(contentWidth - gridAtMinimumKeys - wideWidthWithoutKeys) / 6,
+				(height - bottomPadding - (13 * buttonEdge + 2 * faceBorder)) / 6
+			);
+			gridSize = Math.max(1, Math.floor(wideGridAt(keySize)));
+			allowLayoutOverflow = false;
+			return;
+		}
+
+		const sideCandidate = sideLayout.fits(minimumKeySize)
+			? sideLayout.gridAt(minimumKeySize)
+			: Number.NEGATIVE_INFINITY;
+		const stackedCandidate = stackedLayout.fits(minimumKeySize)
+			? stackedLayout.gridAt(minimumKeySize)
+			: Number.NEGATIVE_INFINITY;
+		const winner =
+			sideCandidate >= stackedCandidate
+				? { mode: 'side' as const, grid: sideCandidate, layout: sideLayout }
+				: { mode: 'stacked' as const, grid: stackedCandidate, layout: stackedLayout };
+
+		if (!Number.isFinite(winner.grid) || winner.grid < minimumUsefulGridSize) {
+			layoutMode = 'stacked';
+			keySize = minimumKeySize;
+			gridSize = Math.max(1, Math.floor(contentWidth));
+			allowLayoutOverflow = true;
+			return;
+		}
+
+		allowLayoutOverflow = false;
+		layoutMode = winner.mode;
+		keySize = clampKeySize(winner.layout.keyCapacityAt(winner.grid));
+		gridSize = Math.max(1, Math.floor(winner.layout.gridAt(keySize)));
+	}
+
+	onMount(() => {
+		const resizeObserver = new ResizeObserver(updateResponsiveLayout);
+		resizeObserver.observe(appContainer);
+		requestAnimationFrame(updateResponsiveLayout);
+		return () => resizeObserver.disconnect();
+	});
 </script>
 
 <svelte:window
@@ -205,8 +318,13 @@
 	onblur={clearHeldModifiers}
 />
 
-<div class="app-container">
-	{#if displayedPanel === 'Info' || !smallerThanDesktop.current}
+<div
+	class="app-container layout-{layoutMode}"
+	class:allow-layout-overflow={allowLayoutOverflow}
+	bind:this={appContainer}
+	style={layoutStyle}
+>
+	{#if displayedPanel === 'Info' || layoutMode === 'wide'}
 		<div class="left-panel">
 			<IsometricBorder color="secondary" fitHeight>
 				<div class="info-content bg-background-lightest">
@@ -251,7 +369,7 @@
 		</IsometricBorder>
 	</div>
 
-	{#if displayedPanel === 'Keypad' || !smallerThanDesktop.current}
+	{#if displayedPanel === 'Keypad' || layoutMode === 'wide'}
 		<div class="right-panel">
 			<IsometricBorder color="accent" fitContent>
 				<div class="keypad-content bg-background-lightest">
@@ -263,10 +381,7 @@
 									label={num}
 									color="primary"
 									onchangeHandler={(event) =>
-										handleKeypadNumber(
-											Number(num),
-											event.detail === 0 ? 'keyboard' : 'pointer'
-										)}
+										handleKeypadNumber(Number(num), event.detail === 0 ? 'keyboard' : 'pointer')}
 								/>
 							{/each}
 						</div>
@@ -324,11 +439,11 @@
 								<Highlighter />
 							</KeypadButton>
 						</div>
-					</div>
-					<div class="keypad secondary-keypad">
-						<KeypadButton label="Multi-select" color="accent" checkbox bind:checked={multiSelect}>
-							<Grid2x2Plus />
-						</KeypadButton>
+						<div class="secondary-keypad">
+							<KeypadButton label="Multi-select" color="accent" checkbox bind:checked={multiSelect}>
+								<Grid2x2Plus />
+							</KeypadButton>
+						</div>
 					</div>
 				</div>
 			</IsometricBorder>
@@ -342,53 +457,45 @@
 
 <style lang="scss">
 	.app-container {
-		--horizontal-margin: 1vmin;
+		--page-gap: 0.5rem;
+		--section-gap: 8px;
+		--keypad-gap: calc(var(--button-border-width) * 2);
+		--keypad-padding: var(--button-border-width);
+		--panel-face-border-size: 4px;
 
 		display: grid;
-		grid-template-areas: 'info sudoku keypad';
-		grid-template-columns: 1fr auto 1fr;
-	}
-
-	.left-panel {
-		margin-right: calc(var(--horizontal-margin) + var(--panel-border-width));
-		margin-left: var(--horizontal-margin);
-		margin-bottom: var(--panel-border-width);
-
-		grid-area: info;
+		flex: 1 1 0;
+		width: 100%;
+		min-height: 0;
+		min-width: 0;
+		padding: 0 calc(var(--page-gap) + var(--panel-border-width))
+			calc(var(--page-gap) + var(--panel-border-width)) var(--page-gap);
+		overflow: hidden;
 	}
 
 	.sudoku-grid-container {
-		aspect-ratio: 1;
-		height: 81vh;
-		width: 81vh;
-		// The isometric edge occupies the panel-width portion of this margin.
-		// Keep one horizontal margin visible after it, matching the info-panel side.
-		margin-right: calc(var(--horizontal-margin) + var(--panel-border-width));
-		margin-left: var(--horizontal-margin);
-
 		grid-area: sudoku;
+		aspect-ratio: 1;
+		height: var(--grid-size);
+		width: var(--grid-size);
+	}
+
+	.left-panel,
+	.right-panel {
+		grid-area: panel;
+		min-width: 0;
+		align-self: start;
+		justify-self: start;
 	}
 
 	.right-panel {
-		margin-right: calc(var(--horizontal-margin) + var(--panel-border-width));
-		margin-left: var(--horizontal-margin);
-		margin-bottom: var(--panel-border-width);
-		align-self: start;
-		justify-self: start;
-
-		grid-area: keypad;
+		--size-font: 4rem;
 	}
 
 	.info-content,
-	.keypad-content {
-		--panel-face-border-size: 5px;
-
-		height: 100%;
-		padding: 0.5vw;
-	}
-
 	.info-content {
 		border: var(--panel-face-border-size) solid var(--color-secondary-light);
+		overflow: auto;
 	}
 
 	.settings-switches {
@@ -403,8 +510,9 @@
 		border: var(--panel-face-border-size) solid var(--color-accent-light);
 		// Button faces define the grid size, while their isometric edges overflow it.
 		// Add that edge depth so the visible right/bottom whitespace matches the left.
-		padding-right: calc(0.5vw + var(--button-border-width));
-		padding-bottom: calc(0.5vw + var(--button-border-width));
+		padding: var(--keypad-padding);
+		padding-right: calc(var(--keypad-padding) + var(--button-border-width));
+		padding-bottom: calc(var(--keypad-padding) + var(--button-border-width));
 	}
 
 	.left-panel h1 {
@@ -413,161 +521,108 @@
 
 	.keypad {
 		display: grid;
-		grid-template-columns: repeat(3, max-content);
-		gap: 1rem;
+		grid-template-columns: repeat(3, var(--key-size, max-content));
+		gap: var(--keypad-gap);
 	}
 
 	.number-keypad,
-	.tool-keypad {
+	.tool-keypad,
+	.secondary-keypad {
 		display: contents;
 	}
 
-	.secondary-keypad {
-		margin-top: calc(1rem + var(--button-border-width));
-	}
-
 	.layout-button-container {
-		display: none;
+		display: flex;
 		grid-area: button;
+		align-self: start;
+		justify-content: flex-start;
+		gap: var(--keypad-gap);
 	}
 
-	@media (min-width: 1616px) {
-		// desktop
-		.app-container {
-			flex: 1 1 0;
-			min-height: 0;
-		}
-
-		.sudoku-grid-container {
-			// Leave room for the isometric edge so the complete grid fits in the viewport.
-			height: calc(100% - var(--panel-border-width));
-			width: auto;
-		}
+	.layout-side {
+		grid-template-columns: var(--grid-size) max-content minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr);
+		grid-template-areas:
+			'sudoku button .'
+			'sudoku panel .';
+		column-gap: calc(var(--panel-border-width) + var(--section-gap));
 	}
 
-	@media (max-width: 1615px) {
-		//tablet landscape
-		.app-container {
-			grid-template-columns: auto 1fr;
-			grid-template-rows: auto 1fr;
-			grid-template-areas:
-				'sudoku button button'
-				'sudoku keypad info';
-		}
-		.layout-button-container {
-			display: flex;
-			margin-bottom: calc(var(--horizontal-margin) * 2);
-			margin-left: var(--horizontal-margin);
-			gap: 2vmin;
-		}
+	.layout-side .layout-button-container {
+		margin-bottom: calc(var(--button-border-width) + var(--section-gap));
 	}
 
-	@media (max-width: 1080px) {
-		.sudoku-grid-container {
-			height: 72vh;
-			width: 72vh;
-		}
+	.layout-wide .right-panel,
+	.layout-side .right-panel,
+	.layout-stacked .right-panel {
+		--size-font: calc(var(--key-size) - 1vmin);
 	}
 
-	@media (max-width: 1000px) {
-		.sudoku-grid-container {
-			height: 63vh;
-			width: 63vh;
-		}
+	.layout-stacked {
+		grid-template-columns: var(--grid-size) minmax(0, 1fr);
+		grid-template-rows: var(--grid-size) auto auto;
+		align-content: start;
+		grid-template-areas:
+			'sudoku .'
+			'button .'
+			'panel .';
 	}
 
-	@media (max-width: 1000px) and (max-height: 859px) {
-		.sudoku-grid-container {
-			font-size: 0.7rem;
-		}
+	.layout-stacked .layout-button-container {
+		margin-top: calc(var(--panel-border-width) + var(--section-gap));
+		margin-bottom: calc(var(--button-border-width) + var(--section-gap));
 	}
 
-	@media (max-width: 900px) {
-		.app-container {
-			grid-template-rows: auto auto 1fr;
-			grid-template-areas:
-				'sudoku'
-				'button'
-				'keypad'
-				'info';
-		}
-
-		.sudoku-grid-container {
-			height: 54vh;
-			width: 54vh;
-			font-size: 0.7rem;
-		}
-		.layout-button-container {
-			margin-top: 1rem;
-		}
+	.layout-stacked .left-panel {
+		width: var(--grid-size);
 	}
 
-	// The keypad is below the grid in this range. Arrange it as five columns by four rows.
-	@media (max-width: 900px) and (min-height: 391px) {
-		.keypad {
-			grid-template-columns: max-content max-content;
-		}
-
-		.number-keypad {
-			display: grid;
-			grid-template-columns: repeat(3, max-content);
-			gap: 1rem;
-		}
-
-		.tool-keypad {
-			display: grid;
-			grid-template-rows: repeat(3, max-content);
-			grid-auto-flow: column;
-			gap: 1rem;
-		}
+	.layout-stacked .keypad {
+		grid-template-columns: max-content max-content var(--key-size);
 	}
 
-	@media (max-width: 540px) {
-		.app-container {
-			grid-template-rows: auto auto 1fr;
-			grid-template-areas:
-				'sudoku'
-				'button'
-				'keypad'
-				'info';
-		}
+	.layout-stacked .number-keypad {
+		display: grid;
+		grid-template-columns: repeat(3, var(--key-size));
+		gap: var(--keypad-gap);
+	}
 
-		.sudoku-grid-container {
-			height: 95vw;
-			width: 95vw;
-			font-size: 0.7rem;
-		}
-		.layout-button-container {
-			margin-top: 1rem;
-		}
+	.layout-stacked .tool-keypad {
+		display: grid;
+		grid-template-rows: repeat(3, var(--key-size));
+		grid-auto-flow: column;
+		gap: var(--keypad-gap);
 	}
-	@media (max-width: 400px) and (max-height: 700px) {
-		.sudoku-grid-container {
-			font-size: 0.5rem;
-		}
-	}
-	@media (max-width: 450px), (max-height: 680px) {
-		.info-content,
-		.keypad-content {
-			--panel-face-border-size: 0.2rem;
-		}
-	}
-	@media (max-height: 390px) {
-		.app-container {
-			grid-template-columns: auto 1fr;
-			grid-template-rows: auto 1fr;
-			grid-template-areas:
-				'sudoku button button'
-				'sudoku keypad info';
-		}
 
-		.sudoku-grid-container {
-			height: 95vh;
-			width: 95vh;
-			font-size: 0.5rem;
-		}
-		.layout-button-container {
-			margin-top: 1rem;
-		}
+	.layout-stacked .secondary-keypad {
+		display: block;
+	}
+
+	.layout-wide {
+		grid-template-columns:
+			minmax(0, 1fr) var(--grid-size)
+			minmax(0, 1fr);
+		grid-template-areas: 'info sudoku keypad';
+		column-gap: calc(var(--panel-border-width) + var(--section-gap));
+	}
+
+	.layout-wide .left-panel {
+		grid-area: info;
+		width: 100%;
+		height: 100%;
+		padding-bottom: var(--panel-border-width);
+	}
+
+	.layout-wide .right-panel {
+		grid-area: keypad;
+	}
+
+	.layout-wide .layout-button-container {
+		display: none;
+	}
+
+	.allow-layout-overflow {
+		overflow-y: auto;
+		grid-template-rows: var(--grid-size) auto auto;
 	}
 </style>

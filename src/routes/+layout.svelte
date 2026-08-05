@@ -46,21 +46,15 @@
 </main>
 
 <style lang="scss">
-	@media (min-width: 1616px) {
-		main {
-			--desktop-grid-spacing: calc(2.4rem + var(--margin-width) + var(--button-border-width));
+	main {
+		display: flex;
+		flex-direction: column;
+		height: 100dvh;
+		min-height: 0;
+	}
 
-			display: flex;
-			flex-direction: column;
-			height: 100dvh;
-			padding-bottom: var(--desktop-grid-spacing);
-			overflow: hidden;
-		}
-
-		header {
-			flex: 0 0 auto;
-			height: 2.4rem;
-		}
+	header {
+		flex: 0 0 auto;
 	}
 
 	header {
@@ -79,7 +73,10 @@
 	.button-container {
 		margin-right: var(--margin-plus-panel);
 	}
-	@media (max-height: 600px) {
+	// Only wide, short screens benefit from reclaiming the header height. Near-square
+	// windows are width-limited, so hiding the title there cannot make the grid larger
+	// and risks crowding the fixed theme switch into the game controls.
+	@media (max-height: 600px) and (min-aspect-ratio: 4/3) {
 		h1 {
 			display: none;
 		}

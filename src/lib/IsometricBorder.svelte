@@ -88,10 +88,4 @@
 		height: var(--diagonal-length);
 		pointer-events: none;
 	}
-
-	@media (max-width: 450px) {
-		.isometric-container {
-			--panel-border-width: 0.5rem;
-		}
-	}
 </style>

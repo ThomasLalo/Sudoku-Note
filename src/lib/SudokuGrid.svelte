@@ -466,11 +466,11 @@
 		position: relative;
 		isolation: isolate;
 		container-type: inline-size;
-		--cell-border-size: 2px;
-		--half-cell-border-size: 1px;
-		--box-border-size: 5px;
-		--half-box-border-size: 2.5px;
-		--selection-visible-size: 4px;
+		--cell-border-size: clamp(1px, 0.2cqi, 2px);
+		--half-cell-border-size: calc(var(--cell-border-size) / 2);
+		--box-border-size: clamp(3px, 0.52cqi, 5px);
+		--half-box-border-size: calc(var(--box-border-size) / 2);
+		--selection-visible-size: clamp(2px, 0.42cqi, 4px);
 		--cell-selection-depth: calc(var(--selection-visible-size) + var(--half-cell-border-size));
 		--box-selection-depth: calc(var(--selection-visible-size) + var(--half-box-border-size));
 		width: 100%;
@@ -635,7 +635,7 @@
 	}
 
 	.value {
-		font-size: 7cqi;
+		font-size: clamp(1.25rem, 7cqi, 4.5rem);
 	}
 
 	.value-revealed {
@@ -659,6 +659,12 @@
 		align-items: center;
 		justify-content: center;
 		line-height: 1;
+		font-size: clamp(0.5rem, 2.4cqi, 1.1rem);
+	}
+
+	.candidate-text {
+		max-width: 100%;
+		max-height: 100%;
 	}
 
 	.candidate-crossed-out {
@@ -713,14 +719,5 @@
 
 	.candidate-hidden {
 		visibility: hidden;
-	}
-
-	@media (max-width: 450px) or (max-height: 680px) {
-		.sudoku-grid {
-			--cell-border-size: 1px;
-			--half-cell-border-size: 0.5px;
-			--box-border-size: 3px;
-			--half-box-border-size: 1.5px;
-		}
 	}
 </style>

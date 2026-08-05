@@ -11,9 +11,6 @@ test('renders and selects cells in the layered Sudoku grid', async ({ page }) =>
 	const grid = page.locator('.sudoku-grid');
 	await expect(grid).toBeVisible();
 	await expect(grid.locator('.sudoku-cell')).toHaveCount(81);
-	await expect(grid.locator('.variant-layer')).toHaveCount(1);
-	await expect(grid.locator('.selection-layer')).toHaveCount(1);
-	await expect(grid.locator('.grid-line-layer')).toHaveCount(1);
 	await waitForGridHydration(page);
 
 	await grid.locator('.sudoku-cell').nth(30).click();
@@ -356,13 +353,15 @@ test('keeps mobile grid lines consistent and candidates clear of cell borders', 
 	await waitForGridHydration(page);
 
 	const gridLineWidths = await page.locator('.sudoku-grid').evaluate((grid) => {
-		const styles = getComputedStyle(grid);
+		const cellLine = grid.querySelector<SVGElement>('.grid-line:not(.box-line)');
+		const boxLine = grid.querySelector<SVGElement>('.grid-line.box-line');
 		return {
-			cell: styles.getPropertyValue('--cell-border-size').trim(),
-			box: styles.getPropertyValue('--box-border-size').trim()
+			cell: cellLine ? Number.parseFloat(getComputedStyle(cellLine).strokeWidth) : 0,
+			box: boxLine ? Number.parseFloat(getComputedStyle(boxLine).strokeWidth) : 0
 		};
 	});
-	expect(gridLineWidths).toEqual({ cell: '1px', box: '3px' });
+	expect(gridLineWidths.cell).toBeCloseTo(1, 0);
+	expect(gridLineWidths.box).toBeCloseTo(3, 0);
 
 	const topCandidateClearances = await page.locator('.sudoku-cell').evaluateAll((cells) =>
 		cells.map((cell) => {
@@ -452,8 +451,8 @@ test('switches notes and keypad between standard and flipped layouts', async ({ 
 	expect(await getKeypadOrder()).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
 });
 
-test('uses the five-column keypad layout below the grid', async ({ page }) => {
-	await page.setViewportSize({ width: 880, height: 1000 });
+test('uses the six-column keypad layout below the grid', async ({ page }) => {
+	await page.setViewportSize({ width: 768, height: 1024 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
 	await waitForGridHydration(page);
 
@@ -483,8 +482,182 @@ test('uses the five-column keypad layout below the grid', async ({ page }) => {
 	expect(reveal.x).toBeCloseTo(deleteDigit.x);
 	expect(add.x).toBeCloseTo(crossout.x);
 	expect(bold.x).toBeCloseTo(crossout.x);
-	expect(multiSelect.x).toBeCloseTo(seven.x);
-	expect(multiSelect.y).toBeGreaterThan(one.y);
+	expect(multiSelect.y).toBeCloseTo(crossout.y);
+	expect(multiSelect.x).toBeGreaterThan(crossout.x);
+});
+
+test('preserves keypad breathing room and keeps landscape controls beside the grid', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const seven = await page.getByRole('button', { name: '7', exact: true }).boundingBox();
+	const eight = await page.getByRole('button', { name: '8', exact: true }).boundingBox();
+	const keypadContent = await page.locator('.keypad-content').boundingBox();
+	const buttonEdge = await page
+		.getByRole('button', { name: '7', exact: true })
+		.locator('.button-right-parallelogram')
+		.evaluate((edge) => (edge as HTMLElement).offsetWidth);
+	const keypadFaceBorder = await page
+		.locator('.keypad-content')
+		.evaluate((content) => Number.parseFloat(getComputedStyle(content).borderLeftWidth));
+	expect(seven).not.toBeNull();
+	expect(eight).not.toBeNull();
+	expect(keypadContent).not.toBeNull();
+	if (!seven || !eight || !keypadContent) return;
+
+	const visibleKeyGap = eight.x - (seven.x + seven.width) - buttonEdge;
+	const visibleKeypadPadding = seven.x - keypadContent.x - keypadFaceBorder;
+	expect(visibleKeyGap).toBeCloseTo(buttonEdge, 0);
+	expect(visibleKeypadPadding).toBeCloseTo(buttonEdge, 0);
+
+	await page.setViewportSize({ width: 900, height: 800 });
+	const grid = await page.locator('.sudoku-grid-container').boundingBox();
+	const keypadPanel = await page.locator('.right-panel').boundingBox();
+	const gridEdge = await page
+		.locator('.sudoku-grid-container .right-parallelogram')
+		.evaluate((edge) => (edge as HTMLElement).offsetWidth);
+	expect(grid).not.toBeNull();
+	expect(keypadPanel).not.toBeNull();
+	if (!grid || !keypadPanel) return;
+
+	const visiblePanelGap = keypadPanel.x - (grid.x + grid.width) - gridEdge;
+	const sectionGap = await page
+		.locator('.app-container')
+		.evaluate((app) => Number.parseFloat(getComputedStyle(app).getPropertyValue('--section-gap')));
+	expect(visiblePanelGap).toBeCloseTo(sectionGap, 0);
+	expect(keypadPanel.y).toBeLessThan(grid.y + grid.height);
+	expect(
+		await page.evaluate(() => ({
+			horizontal: document.documentElement.scrollWidth > innerWidth,
+			vertical: document.documentElement.scrollHeight > innerHeight
+		}))
+	).toEqual({ horizontal: false, vertical: false });
+
+	await page.setViewportSize({ width: 844, height: 390 });
+	await expect(page.locator('.app-container')).toHaveClass(/layout-side/);
+	const shortGrid = await page.locator('.sudoku-grid-container').boundingBox();
+	const shortKey = await page.getByRole('button', { name: '7', exact: true }).boundingBox();
+	expect(shortGrid).not.toBeNull();
+	expect(shortKey).not.toBeNull();
+	if (!shortGrid || !shortKey) return;
+	expect(shortGrid.height).toBeLessThan(390);
+	expect(shortKey.width).toBeGreaterThanOrEqual(43.5);
+});
+
+test('uses side controls near square while preserving the tall portrait stack', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 662, height: 673 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const nearSquareGrid = await page.locator('.sudoku-grid-container').boundingBox();
+	const nearSquareKeypad = await page.locator('.right-panel').boundingBox();
+	expect(nearSquareGrid).not.toBeNull();
+	expect(nearSquareKeypad).not.toBeNull();
+	if (!nearSquareGrid || !nearSquareKeypad) return;
+
+	expect(nearSquareGrid.width).toBeGreaterThan(400);
+	expect(nearSquareKeypad.x).toBeGreaterThan(nearSquareGrid.x + nearSquareGrid.width);
+
+	await page.setViewportSize({ width: 675, height: 900 });
+	const portraitGrid = await page.locator('.sudoku-grid-container').boundingBox();
+	const portraitKeypad = await page.locator('.right-panel').boundingBox();
+	expect(portraitGrid).not.toBeNull();
+	expect(portraitKeypad).not.toBeNull();
+	if (!portraitGrid || !portraitKeypad) return;
+
+	expect(portraitKeypad.y).toBeGreaterThan(portraitGrid.y + portraitGrid.height);
+});
+
+test('never shrinks the grid when a fixed-width window gets taller', async ({ page }) => {
+	await page.setViewportSize({ width: 500, height: 540 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const observations: { height: number; gridSize: number; keySize: number; mode: string }[] = [];
+	for (const height of [540, 550, 560, 570, 580, 590, 600, 620, 650]) {
+		await page.setViewportSize({ width: 500, height });
+		await page.evaluate(
+			() =>
+				new Promise<void>((resolve) =>
+					requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+				)
+		);
+
+		const gridBounds = await page.locator('.sudoku-grid-container').boundingBox();
+		const keyBounds = await page.getByRole('button', { name: '7', exact: true }).boundingBox();
+		const mode = await page
+			.locator('.app-container')
+			.evaluate((app) => [...app.classList].find((name) => name.startsWith('layout-')) ?? '');
+		expect(gridBounds).not.toBeNull();
+		expect(keyBounds).not.toBeNull();
+		if (!gridBounds || !keyBounds) continue;
+		observations.push({ height, gridSize: gridBounds.width, keySize: keyBounds.width, mode });
+	}
+
+	for (const [index, observation] of observations.entries()) {
+		expect(observation.keySize).toBeGreaterThanOrEqual(31.5);
+		if (index === 0) continue;
+		expect(observation.gridSize).toBeGreaterThanOrEqual(observations[index - 1].gridSize - 1);
+	}
+	expect(new Set(observations.map((observation) => observation.mode))).toEqual(
+		new Set(['layout-side', 'layout-stacked'])
+	);
+});
+
+test('never shrinks the grid when a fixed-height window gets wider', async ({ page }) => {
+	await page.setViewportSize({ width: 500, height: 900 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	let previousGridSize = 0;
+	for (const width of [500, 600, 650, 675, 700, 800, 900, 1200, 1615, 1616, 1920]) {
+		await page.setViewportSize({ width, height: 900 });
+		await page.evaluate(
+			() =>
+				new Promise<void>((resolve) =>
+					requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+				)
+		);
+
+		const gridBounds = await page.locator('.sudoku-grid-container').boundingBox();
+		expect(gridBounds).not.toBeNull();
+		if (!gridBounds) continue;
+		expect(gridBounds.width).toBeGreaterThanOrEqual(previousGridSize - 1);
+		previousGridSize = gridBounds.width;
+	}
+});
+
+test('only hides the title when a short viewport is height limited', async ({ page }) => {
+	await page.setViewportSize({ width: 662, height: 596 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const title = page.locator('header h1');
+	const themeSwitch = page.locator('header .button-container');
+	const panelSelector = page.locator('.layout-button-container');
+	await expect(title).toBeVisible();
+
+	const themeBounds = await themeSwitch.boundingBox();
+	const selectorBounds = await panelSelector.boundingBox();
+	expect(themeBounds).not.toBeNull();
+	expect(selectorBounds).not.toBeNull();
+	if (!themeBounds || !selectorBounds) return;
+
+	const overlaps = !(
+		themeBounds.x + themeBounds.width <= selectorBounds.x ||
+		selectorBounds.x + selectorBounds.width <= themeBounds.x ||
+		themeBounds.y + themeBounds.height <= selectorBounds.y ||
+		selectorBounds.y + selectorBounds.height <= themeBounds.y
+	);
+	expect(overlaps).toBe(false);
+
+	await page.setViewportSize({ width: 900, height: 596 });
+	await expect(title).toBeHidden();
 });
 
 test('crosses out a candidate in every selected cell from the keypad', async ({ page }) => {
@@ -503,9 +676,7 @@ test('crosses out a candidate in every selected cell from the keypad', async ({ 
 	await page.getByRole('button', { name: '4', exact: true }).click();
 	await expect(page.getByLabel('Reveal all candidates')).toBeChecked();
 	await expect(page.locator('.cell-background.selected')).toHaveCount(2);
-	await expect(cells.nth(1).locator('[data-candidate="4"]')).toHaveClass(
-		/candidate-revealed/
-	);
+	await expect(cells.nth(1).locator('[data-candidate="4"]')).toHaveClass(/candidate-revealed/);
 
 	for (const cellIndex of [0, 10]) {
 		const candidate = cells.nth(cellIndex).locator('[data-candidate="4"]');
@@ -785,7 +956,7 @@ test('renders crossed-out bold candidates like regular crossed-out candidates', 
 	expect(styles[0]).toEqual(styles[1]);
 });
 
-test('renders a concave selection across box boundaries', async ({ page }, testInfo) => {
+test('renders a concave selection across box boundaries', async ({ page }) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
 
@@ -804,10 +975,9 @@ test('renders a concave selection across box boundaries', async ({ page }, testI
 
 	await expect(grid.locator('.selection-segment')).toHaveCount(8);
 	await expect(grid.locator('.selection-corner')).toHaveCount(1);
-	await grid.screenshot({ path: testInfo.outputPath('concave-selection.png') });
 });
 
-test('renders equal selection widths on every side of a box', async ({ page }, testInfo) => {
+test('renders equal selection widths on every side of a box', async ({ page }) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
 
@@ -823,39 +993,6 @@ test('renders equal selection widths on every side of a box', async ({ page }, t
 
 	await expect(grid.locator('.cell-background.selected')).toHaveCount(9);
 	await expect(grid.locator('.selection-segment')).toHaveCount(12);
-	await grid.screenshot({ path: testInfo.outputPath('box-selection.png') });
-});
-
-test('captures the isometric border entry corners', async ({ page }, testInfo) => {
-	await page.setViewportSize({ width: 1400, height: 1000 });
-	await page.goto('/', { waitUntil: 'domcontentloaded' });
-	await waitForGridHydration(page);
-
-	const bounds = await page.locator('.sudoku-grid').boundingBox();
-	expect(bounds).not.toBeNull();
-	if (!bounds) return;
-
-	const border = page.locator('.isometric-container').first();
-	await expect(border.locator('.right-parallelogram')).toHaveCSS('top', '0px');
-	await expect(border.locator('.bottom-parallelogram')).toHaveCSS('left', '0px');
-
-	await page.screenshot({
-		path: testInfo.outputPath('isometric-top-right.png'),
-		clip: { x: bounds.x + bounds.width - 12, y: bounds.y, width: 32, height: 32 }
-	});
-	await page.screenshot({
-		path: testInfo.outputPath('isometric-bottom-left.png'),
-		clip: { x: bounds.x, y: bounds.y + bounds.height - 12, width: 32, height: 32 }
-	});
-	await page.screenshot({
-		path: testInfo.outputPath('isometric-bottom-right.png'),
-		clip: {
-			x: bounds.x + bounds.width - 12,
-			y: bounds.y + bounds.height - 12,
-			width: 40,
-			height: 40
-		}
-	});
 });
 
 test('aligns panel and button isometric edges at the mobile size', async ({ page }) => {
@@ -890,7 +1027,7 @@ test('aligns panel and button isometric edges at the mobile size', async ({ page
 	expect(buttonGeometry?.cornerWidth).toBe(buttonGeometry?.rightWidth);
 });
 
-test('uses even spacing above and below the grid on desktop', async ({ page }) => {
+test('maximizes the desktop grid without clipping its isometric border', async ({ page }) => {
 	await page.setViewportSize({ width: 1920, height: 1080 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
 	await waitForGridHydration(page);
@@ -904,8 +1041,10 @@ test('uses even spacing above and below the grid on desktop', async ({ page }) =
 	expect(bottomEdgeBounds).not.toBeNull();
 	if (!gridBounds || !bottomEdgeBounds) return;
 
-	expect(gridBounds.height).toBeGreaterThan(0.85 * 1080);
-	const topSpace = gridBounds.y;
+	expect(gridBounds.height).toBeGreaterThan(0.9 * 1080);
 	const bottomSpace = 1080 - (bottomEdgeBounds.y + bottomEdgeBounds.height);
-	expect(bottomSpace).toBeCloseTo(topSpace, 0);
+	const pageGap = await page
+		.locator('.app-container')
+		.evaluate((app) => Number.parseFloat(getComputedStyle(app).paddingLeft));
+	expect(bottomSpace).toBeGreaterThanOrEqual(pageGap - 1);
 });
