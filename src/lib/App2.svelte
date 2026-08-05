@@ -221,8 +221,14 @@
 		if (width <= 0 || height <= 0) return;
 
 		const styles = getComputedStyle(appContainer);
-		const panelEdge = cssPixels(styles.getPropertyValue('--panel-border-width'), 8);
-		const buttonEdge = cssPixels(styles.getPropertyValue('--button-border-width'), 5);
+		const panelEdgeElement = appContainer.querySelector<HTMLElement>(
+			'.sudoku-grid-container .right-parallelogram'
+		);
+		const buttonEdgeElement = document.querySelector<HTMLElement>('.button-right-parallelogram');
+		const panelEdge = panelEdgeElement ? cssPixels(getComputedStyle(panelEdgeElement).width, 8) : 8;
+		const buttonEdge = buttonEdgeElement
+			? cssPixels(getComputedStyle(buttonEdgeElement).width, 5)
+			: 5;
 		const faceBorder = cssPixels(styles.getPropertyValue('--panel-face-border-size'), 4);
 		const sectionGap = cssPixels(styles.getPropertyValue('--section-gap'), 8);
 		const paddingLeft = cssPixels(styles.paddingLeft, 8);
@@ -492,10 +498,10 @@
 		--size-font: 4rem;
 	}
 
-	.info-content,
 	.info-content {
 		border: var(--panel-face-border-size) solid var(--color-secondary-light);
-		overflow: auto;
+		padding: var(--keypad-padding);
+		padding-bottom: calc(var(--keypad-padding) + var(--button-border-width));
 	}
 
 	.settings-switches {

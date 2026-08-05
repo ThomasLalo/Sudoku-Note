@@ -1027,6 +1027,73 @@ test('aligns panel and button isometric edges at the mobile size', async ({ page
 	expect(buttonGeometry?.cornerWidth).toBe(buttonGeometry?.rightWidth);
 });
 
+test('restores deeper isometric edges only when both viewport dimensions have room', async ({
+	page
+}) => {
+	const edgeWidths = () =>
+		page.evaluate(() => {
+			const panelEdge = document.querySelector<HTMLElement>(
+				'.sudoku-grid-container .right-parallelogram'
+			);
+			const buttonEdge = document.querySelector<HTMLElement>('.button-right-parallelogram');
+			return {
+				panel: panelEdge ? Number.parseFloat(getComputedStyle(panelEdge).width) : 0,
+				button: buttonEdge ? Number.parseFloat(getComputedStyle(buttonEdge).width) : 0
+			};
+		});
+
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+	const compact = await edgeWidths();
+
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.evaluate(() => new Promise(requestAnimationFrame));
+	const roomy = await edgeWidths();
+
+	await page.setViewportSize({ width: 844, height: 390 });
+	await page.evaluate(() => new Promise(requestAnimationFrame));
+	const short = await edgeWidths();
+
+	expect(compact).toEqual({ panel: 8, button: 5 });
+	expect(roomy).toEqual({ panel: 16, button: 8 });
+	expect(short).toEqual(compact);
+});
+
+test('compensates for the bottom Info button edge without creating an internal scroll area', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1920, height: 1080 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const geometry = await page.locator('.info-content').evaluate((info) => {
+		const styles = getComputedStyle(info);
+		const keypad = document.querySelector<HTMLElement>('.keypad-content');
+		const infoButtonEdge = info.querySelector<HTMLElement>('.button-right-parallelogram');
+		const bounds = info.getBoundingClientRect();
+		const firstChildBounds = info.firstElementChild?.getBoundingClientRect();
+		const paddingLeft = Number.parseFloat(styles.paddingLeft);
+		const borderLeft = Number.parseFloat(styles.borderLeftWidth);
+
+		return {
+			paddingLeft,
+			paddingBottom: Number.parseFloat(styles.paddingBottom),
+			buttonEdge: infoButtonEdge ? Number.parseFloat(getComputedStyle(infoButtonEdge).width) : 0,
+			keypadPaddingLeft: keypad ? Number.parseFloat(getComputedStyle(keypad).paddingLeft) : 0,
+			firstChildInset: firstChildBounds ? firstChildBounds.left - bounds.left - borderLeft : 0,
+			overflowX: styles.overflowX,
+			overflowY: styles.overflowY
+		};
+	});
+
+	expect(geometry.paddingLeft).toBe(geometry.keypadPaddingLeft);
+	expect(geometry.paddingBottom).toBe(geometry.paddingLeft + geometry.buttonEdge);
+	expect(geometry.firstChildInset).toBeCloseTo(geometry.paddingLeft, 0);
+	expect(geometry.overflowX).toBe('visible');
+	expect(geometry.overflowY).toBe('visible');
+});
+
 test('maximizes the desktop grid without clipping its isometric border', async ({ page }) => {
 	await page.setViewportSize({ width: 1920, height: 1080 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
