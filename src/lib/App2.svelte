@@ -42,7 +42,10 @@
 	let gridSize = $state(300);
 	let keySize = $state(minimumKeySize);
 	let allowLayoutOverflow = $state(false);
-	let layoutStyle = $derived(`--grid-size: ${gridSize}px; --key-size: ${keySize}px;`);
+	let infoPanelMaxHeight = $state('none');
+	let layoutStyle = $derived(
+		`--grid-size: ${gridSize}px; --key-size: ${keySize}px; --info-panel-max-height: ${infoPanelMaxHeight};`
+	);
 	let keypadMode: KeypadMode = $state('Enter digit');
 	let shiftHeld = $state(false);
 	let controlHeld = $state(false);
@@ -281,6 +284,7 @@
 				(height - bottomPadding - (13 * buttonEdge + 2 * faceBorder)) / 6
 			);
 			gridSize = Math.max(1, Math.floor(wideGridAt(keySize)));
+			infoPanelMaxHeight = `${Math.max(1, Math.floor(height - bottomPadding))}px`;
 			allowLayoutOverflow = false;
 			return;
 		}
@@ -300,6 +304,7 @@
 			layoutMode = 'stacked';
 			keySize = minimumKeySize;
 			gridSize = Math.max(1, Math.floor(contentWidth));
+			infoPanelMaxHeight = 'none';
 			allowLayoutOverflow = true;
 			return;
 		}
@@ -308,6 +313,11 @@
 		layoutMode = winner.mode;
 		keySize = clampKeySize(winner.layout.keyCapacityAt(winner.grid));
 		gridSize = Math.max(1, Math.floor(winner.layout.gridAt(keySize)));
+		const spaceAbovePanel =
+			winner.mode === 'stacked'
+				? gridSize + selectorHeight + panelEdge + buttonEdge + 2 * sectionGap
+				: selectorHeight + buttonEdge + sectionGap;
+		infoPanelMaxHeight = `${Math.max(1, Math.floor(height - bottomPadding - spaceAbovePanel))}px`;
 	}
 
 	onMount(() => {
@@ -342,7 +352,9 @@
 						<li><kbd>Space</kbd> cycles through keypad tools</li>
 						<li>Holding <kbd>Shift</kbd> temporarily switches to Crossout candidate</li>
 						<li>Holding <kbd>Ctrl</kbd> temporarily switches to Enter digit</li>
-						<li><kbd>Backspace</kbd> or <kbd>Delete</kbd> removes entered digits from selected cells</li>
+						<li>
+							<kbd>Backspace</kbd> or <kbd>Delete</kbd> removes entered digits from selected cells
+						</li>
 						<li><kbd>Escape</kbd> clears the selection</li>
 					</ul>
 					<div class="settings-switches">
@@ -493,8 +505,13 @@
 	.right-panel {
 		grid-area: panel;
 		min-width: 0;
+		min-height: 0;
 		align-self: start;
 		justify-self: start;
+	}
+
+	.left-panel {
+		width: 100%;
 	}
 
 	.right-panel {
@@ -502,9 +519,12 @@
 	}
 
 	.info-content {
+		max-height: var(--info-panel-max-height);
 		border: var(--panel-face-border-size) solid var(--color-secondary-light);
 		padding: var(--keypad-padding);
 		padding-bottom: calc(var(--keypad-padding) + var(--button-border-width));
+		overflow-y: auto;
+		overscroll-behavior: contain;
 	}
 
 	.settings-switches {
@@ -582,7 +602,7 @@
 
 	.layout-stacked {
 		grid-template-columns: var(--grid-size) minmax(0, 1fr);
-		grid-template-rows: var(--grid-size) auto auto;
+		grid-template-rows: var(--grid-size) auto minmax(0, 1fr);
 		align-content: start;
 		grid-template-areas:
 			'sudoku .'
@@ -624,15 +644,13 @@
 		grid-template-columns:
 			minmax(0, 1fr) var(--grid-size)
 			minmax(0, 1fr);
+		grid-template-rows: minmax(0, 1fr);
 		grid-template-areas: 'info sudoku keypad';
 		column-gap: calc(var(--panel-border-width) + var(--section-gap));
 	}
 
 	.layout-wide .left-panel {
 		grid-area: info;
-		width: 100%;
-		height: 100%;
-		padding-bottom: var(--panel-border-width);
 	}
 
 	.layout-wide .right-panel {

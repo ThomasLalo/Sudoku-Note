@@ -1060,7 +1060,7 @@ test('restores deeper isometric edges only when both viewport dimensions have ro
 	expect(short).toEqual(compact);
 });
 
-test('compensates for the bottom Info button edge without creating an internal scroll area', async ({
+test('compensates for the bottom Info button edge without overflowing a roomy panel', async ({
 	page
 }) => {
 	await page.setViewportSize({ width: 1920, height: 1080 });
@@ -1082,16 +1082,16 @@ test('compensates for the bottom Info button edge without creating an internal s
 			buttonEdge: infoButtonEdge ? Number.parseFloat(getComputedStyle(infoButtonEdge).width) : 0,
 			keypadPaddingLeft: keypad ? Number.parseFloat(getComputedStyle(keypad).paddingLeft) : 0,
 			firstChildInset: firstChildBounds ? firstChildBounds.left - bounds.left - borderLeft : 0,
-			overflowX: styles.overflowX,
-			overflowY: styles.overflowY
+			overflowY: styles.overflowY,
+			canScroll: info.scrollHeight > info.clientHeight
 		};
 	});
 
 	expect(geometry.paddingLeft).toBe(geometry.keypadPaddingLeft);
 	expect(geometry.paddingBottom).toBe(geometry.paddingLeft + geometry.buttonEdge);
 	expect(geometry.firstChildInset).toBeCloseTo(geometry.paddingLeft, 0);
-	expect(geometry.overflowX).toBe('visible');
-	expect(geometry.overflowY).toBe('visible');
+	expect(geometry.overflowY).toBe('auto');
+	expect(geometry.canScroll).toBe(false);
 });
 
 test('maximizes the desktop grid without clipping its isometric border', async ({ page }) => {

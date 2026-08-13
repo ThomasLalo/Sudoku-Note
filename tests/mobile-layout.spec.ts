@@ -55,6 +55,58 @@ for (const viewport of mobileViewports) {
 	});
 }
 
+test('scrolls overflowing Info content within the stacked panel', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForLayout(page);
+	await page.getByText('Info', { exact: true }).click();
+
+	const infoPanel = page.locator('.left-panel');
+	const infoContent = page.locator('.info-content');
+	const panelBounds = await infoPanel.boundingBox();
+	expect(panelBounds).not.toBeNull();
+	if (!panelBounds) return;
+
+	expect(panelBounds.y + panelBounds.height).toBeLessThanOrEqual(844 + 1);
+	await expect
+		.poll(() =>
+			infoContent.evaluate((info) => ({
+				canScroll: info.scrollHeight > info.clientHeight,
+				overflowY: getComputedStyle(info).overflowY
+			}))
+		)
+		.toEqual({ canScroll: true, overflowY: 'auto' });
+
+	await infoContent.evaluate((info) => info.scrollTo({ top: info.scrollHeight }));
+	await expect.poll(() => infoContent.evaluate((info) => info.scrollTop)).toBeGreaterThan(0);
+	expect(
+		await page.evaluate(() => ({
+			horizontal: document.documentElement.scrollWidth > innerWidth,
+			vertical: document.documentElement.scrollHeight > innerHeight
+		}))
+	).toEqual({ horizontal: false, vertical: false });
+});
+
+test('scrolls overflowing Info content within the side panel', async ({ page }) => {
+	await page.setViewportSize({ width: 844, height: 390 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await page.locator('.sudoku-cell').first().waitFor({ state: 'visible' });
+	await expect(page.locator('.app-container')).toHaveClass(/layout-side/);
+	await page.getByText('Info', { exact: true }).click();
+
+	const infoContent = page.locator('.info-content');
+	const panelBounds = await page.locator('.left-panel').boundingBox();
+	expect(panelBounds).not.toBeNull();
+	if (!panelBounds) return;
+
+	expect(panelBounds.y + panelBounds.height).toBeLessThanOrEqual(390 + 1);
+	await expect
+		.poll(() => infoContent.evaluate((info) => info.scrollHeight > info.clientHeight))
+		.toBe(true);
+	await infoContent.evaluate((info) => info.scrollTo({ top: info.scrollHeight }));
+	await expect.poll(() => infoContent.evaluate((info) => info.scrollTop)).toBeGreaterThan(0);
+});
+
 test('uses touch-sized text controls on a coarse-pointer phone', async ({ browser, baseURL }) => {
 	const context = await browser.newContext({ ...devices['iPhone 13'], baseURL });
 	const page = await context.newPage();
