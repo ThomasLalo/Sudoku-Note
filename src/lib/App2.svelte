@@ -334,14 +334,17 @@
 		<div class="left-panel">
 			<IsometricBorder color="secondary" fitHeight>
 				<div class="info-content bg-background-lightest">
-					<h1 class="text-primary cascadia-code">Lorem ipsum</h1>
-					<p class="text-text cascadia-code">
-						dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore
-						et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco
-						laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit
-						in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat
-						cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum
-					</p>
+					<h1 class="text-primary cascadia-code">Keyboard controls</h1>
+					<ul class="keyboard-controls text-text cascadia-code">
+						<li><kbd>Arrow keys</kbd> move the selection</li>
+						<li><kbd>Shift</kbd> + <kbd>Arrow keys</kbd> extend the selection</li>
+						<li><kbd>1–9</kbd> use the selected keypad tool</li>
+						<li><kbd>Space</kbd> cycles through keypad tools</li>
+						<li>Holding <kbd>Shift</kbd> temporarily switches to Crossout candidate</li>
+						<li>Holding <kbd>Ctrl</kbd> temporarily switches to Enter digit</li>
+						<li><kbd>Backspace</kbd> or <kbd>Delete</kbd> removes entered digits from selected cells</li>
+						<li><kbd>Escape</kbd> clears the selection</li>
+					</ul>
 					<div class="settings-switches">
 						<TextSwitch
 							label="Flipped notes"
@@ -523,6 +526,19 @@
 
 	.left-panel h1 {
 		margin-bottom: 1rem;
+	}
+
+	.keyboard-controls {
+		padding-left: 1.5rem;
+	}
+
+	.keyboard-controls li + li {
+		margin-top: 0.5rem;
+	}
+
+	.keyboard-controls kbd {
+		font: inherit;
+		color: var(--color-primary);
 	}
 
 	.keypad {
