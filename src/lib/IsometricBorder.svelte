@@ -69,6 +69,26 @@
 		box-shadow: inset 0 -1px var(--right-color); // fixes gap between rectangles caused by anti-aliasing
 	}
 
+	// Transformed edges can land between device pixels at some display scales.
+	// Extend their color one pixel over the face so that antialiasing cannot
+	// expose the face background as a light seam.
+	.right-parallelogram::before,
+	.bottom-parallelogram::before {
+		content: '';
+		position: absolute;
+		pointer-events: none;
+	}
+
+	.right-parallelogram::before {
+		// skewY moves the strip's left edge up by one pixel; counteract that
+		// so it ends flush at both corners of the face.
+		top: 1px;
+		bottom: -1px;
+		left: -1px;
+		width: 2px;
+		background: var(--right-color);
+	}
+
 	.bottom-parallelogram {
 		position: absolute;
 		width: 100%;
@@ -78,6 +98,16 @@
 		top: 100%;
 		left: 0;
 		box-shadow: inset -1px 0 var(--bottom-color);
+	}
+
+	.bottom-parallelogram::before {
+		top: -1px;
+		// skewX moves the strip's top edge left by one pixel; compensate
+		// without shortening it so neither bottom corner develops a gap.
+		left: 1px;
+		right: -1px;
+		height: 2px;
+		background: var(--bottom-color);
 	}
 
 	.corner-square {
