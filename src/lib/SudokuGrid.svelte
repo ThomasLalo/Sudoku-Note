@@ -273,6 +273,7 @@
 <div
 	class="sudoku-grid"
 	bind:this={gridElement}
+	tabindex="-1"
 	onpointermove={handlePointerMove}
 	onpointerleave={() => (hoveredCell = null)}
 >

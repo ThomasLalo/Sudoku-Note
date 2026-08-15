@@ -1,5 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
 
+const standardSolution = [
+	'534678912',
+	'672195348',
+	'198342567',
+	'859761423',
+	'426853791',
+	'713924856',
+	'961537284',
+	'287419635',
+	'345286179'
+].join('');
+
 async function openPuzzle(page: Page) {
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
 	await page.locator('.sudoku-cell').first().waitFor({ state: 'visible' });
@@ -12,6 +24,20 @@ async function beginSolve(page: Page) {
 	await expect(dialog).toBeVisible();
 	await dialog.getByRole('button', { name: 'Start solving', exact: true }).click();
 	await expect(page.locator('.app-container')).toHaveAttribute('data-puzzle-phase', 'solving');
+}
+
+async function enterGridValues(page: Page, values: string, omittedIndices: number[] = []) {
+	const cells = page.locator('.sudoku-cell');
+	const omitted = new Set(omittedIndices);
+
+	for (let row = 0; row < 9; row += 1) {
+		await cells.nth(row * 9).click();
+		for (let column = 0; column < 9; column += 1) {
+			const index = row * 9 + column;
+			if (!omitted.has(index)) await page.keyboard.press(values[index]);
+			if (column < 8) await page.keyboard.press('ArrowRight');
+		}
+	}
 }
 
 test('opens in Setup with editable clues and optional calculated candidates', async ({ page }) => {
@@ -108,7 +134,11 @@ test('requires confirmation and locks clues against keyboard and pointer edits',
 	await expect(dialog).toContainText(
 		'The current digits will become fixed clues and the solve timer will begin.'
 	);
+	await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+	await page.keyboard.press('Tab');
+	await expect(dialog.getByRole('button', { name: 'Start solving', exact: true })).toBeFocused();
 	await dialog.getByRole('button', { name: 'Cancel' }).click();
+	await expect(page.getByRole('button', { name: 'Start solving', exact: true })).toBeFocused();
 
 	await expect(app).toHaveAttribute('data-puzzle-phase', 'setup');
 	await expect(cells.nth(0).locator('.value')).toHaveText('5');
@@ -116,6 +146,7 @@ test('requires confirmation and locks clues against keyboard and pointer edits',
 	await expect(page.locator('.cell-background.selected')).toHaveCount(1);
 
 	await beginSolve(page);
+	await expect(page.getByRole('button', { name: '7', exact: true })).toBeFocused();
 	const clue = cells.nth(0).locator('.value');
 	await expect(clue).toHaveClass(/value-clue/);
 	await expect(clue).toHaveCSS('font-weight', '700');
@@ -146,6 +177,132 @@ test('requires confirmation and locks clues against keyboard and pointer edits',
 	await page.keyboard.press('Backspace');
 	await expect(clue).toHaveText('5');
 	await expect(cells.nth(1).locator('.value')).toHaveCount(0);
+});
+
+test('counts active solving time and completes once independently of candidate annotations', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await openPuzzle(page);
+	await page.clock.install();
+
+	const cells = page.locator('.sudoku-cell');
+	const finalCell = cells.nth(80);
+	await enterGridValues(page, standardSolution, [80]);
+	await page.clock.fastForward('00:20');
+
+	await page.getByText('Info', { exact: true }).click();
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	const showLiveTimer = page.getByLabel('Show live timer');
+	const showLiveTimerSwitch = page.locator('label').filter({ hasText: 'Show live timer' });
+	await expect(showLiveTimer).not.toBeChecked();
+	await showLiveTimerSwitch.click();
+	await expect(page.getByRole('timer')).toHaveCount(0);
+	await page.getByText('Keypad', { exact: true }).click();
+
+	await page.getByRole('button', { name: 'Start solving', exact: true }).click();
+	const startDialog = page.getByRole('dialog', { name: 'Start solving?' });
+	await page.clock.fastForward('00:10');
+	await startDialog.getByRole('button', { name: 'Start solving', exact: true }).click();
+	await page.getByText('Info', { exact: true }).click();
+	const liveTimer = page.getByRole('timer');
+	await expect(liveTimer).toContainText('00:00');
+
+	await page.clock.fastForward('01:05');
+	await expect(liveTimer).toContainText('01:05');
+
+	await page.evaluate(() => {
+		Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+		document.dispatchEvent(new Event('visibilitychange'));
+	});
+	await page.clock.fastForward('00:30');
+	await expect(liveTimer).toContainText('01:05');
+	await page.evaluate(() => {
+		Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+		document.dispatchEvent(new Event('visibilitychange'));
+	});
+	await page.clock.fastForward('00:01');
+	await expect(liveTimer).toContainText('01:06');
+
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	await showLiveTimerSwitch.click();
+	await expect(liveTimer).toHaveCount(0);
+	await page.clock.fastForward('01:00:00');
+	await showLiveTimerSwitch.click();
+	await expect(page.getByRole('timer')).toContainText('01:01:06');
+
+	await page.getByText('Keypad', { exact: true }).click();
+	await finalCell.click();
+	await page.locator('.keypad label[title="Add candidate"]').click();
+	await page.keyboard.press('1');
+	await expect(finalCell.locator('[data-candidate="1"]')).toHaveClass(/candidate-invalid/);
+	await page.locator('.keypad label[title="Enter digit"]').click();
+	await page.keyboard.press('9');
+
+	const completionDialog = page.getByRole('dialog', { name: 'Congratulations!' });
+	await expect(page.locator('.app-container')).toHaveAttribute('data-puzzle-phase', 'completed');
+	await expect(completionDialog).toContainText('01:01:06');
+	const viewPuzzle = completionDialog.getByRole('button', { name: 'View puzzle' });
+	const editFromCompletion = completionDialog.getByRole('button', { name: 'Edit puzzle' });
+	await expect(viewPuzzle).toBeFocused();
+	await page.keyboard.press('Tab');
+	await expect(editFromCompletion).toBeFocused();
+	await page.keyboard.press('Tab');
+	expect(await completionDialog.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(
+		true
+	);
+	await editFromCompletion.click();
+	const editDialog = page.getByRole('dialog', { name: 'Return to Setup?' });
+	await expect(editDialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+	await editDialog.getByRole('button', { name: 'Cancel' }).click();
+	await expect(completionDialog).toBeVisible();
+	await expect(viewPuzzle).toBeFocused();
+	await viewPuzzle.click();
+	await expect(completionDialog).not.toBeVisible();
+	await expect(page.locator('.sudoku-grid')).toBeFocused();
+
+	await page.keyboard.press('8');
+	await page.keyboard.press('Backspace');
+	await page.clock.fastForward('10:00');
+	await expect(finalCell.locator('.value')).toHaveText('9');
+	await expect(completionDialog).not.toBeVisible();
+	await page.getByText('Info', { exact: true }).click();
+	await expect(page.getByRole('timer')).toContainText('01:01:06');
+
+	const settings = page.getByRole('button', { name: 'Settings', exact: true });
+	if ((await settings.getAttribute('aria-expanded')) === 'false') await settings.click();
+	const editPuzzle = page.getByRole('button', { name: 'Edit puzzle' });
+	await editPuzzle.click();
+	await expect(editDialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+	await editDialog.getByRole('button', { name: 'Cancel' }).click();
+	await expect(editPuzzle).toBeFocused();
+	await editPuzzle.click();
+	await editDialog.getByRole('button', { name: 'Return to Setup' }).click();
+
+	await expect(page.locator('.app-container')).toHaveAttribute('data-puzzle-phase', 'setup');
+	await expect(finalCell.locator('.value')).toHaveCount(0);
+	await expect(finalCell.locator('[data-candidate="1"]')).not.toHaveClass(/candidate-invalid/);
+	await expect(page.getByRole('timer')).toHaveCount(0);
+	await expect(settings).toBeFocused();
+});
+
+test('keeps a full standard-invalid grid in Solving without opening completion UI', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await openPuzzle(page);
+
+	const invalidSolution = Array.from({ length: 9 }, (_, row) =>
+		Array.from({ length: 9 }, (_, column) => ((row + column) % 9) + 1).join('')
+	).join('');
+	await enterGridValues(page, invalidSolution);
+	await beginSolve(page);
+
+	await expect(page.locator('.app-container')).toHaveAttribute('data-puzzle-phase', 'solving');
+	await expect(page.getByRole('dialog', { name: 'Congratulations!' })).toHaveCount(0);
+	await expect(page.locator('.cell-background.conflict')).not.toHaveCount(0);
+	await page.keyboard.press('1');
+	await expect(page.getByRole('dialog', { name: 'Congratulations!' })).toHaveCount(0);
 });
 
 test('Edit puzzle preserves clues and discards the solving session', async ({ page }) => {
@@ -224,9 +381,24 @@ test('keeps lifecycle controls usable in wide, side, and stacked layouts', async
 		await expect(page.locator('label[title="Show candidates"]')).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Start solving', exact: true })).toBeVisible();
 
+		if (layout.className !== 'layout-wide') {
+			await page.getByText('Info', { exact: true }).click();
+		}
+		await page.getByRole('button', { name: 'Settings', exact: true }).click();
+		await page.locator('label').filter({ hasText: 'Show live timer' }).click();
+		if (layout.className !== 'layout-wide') {
+			await page.getByText('Keypad', { exact: true }).click();
+		}
+
 		await beginSolve(page);
 		await expect(page.getByRole('button', { name: 'Delete digit' })).toBeVisible();
 		await expect(page.locator('label[title="Bold candidate"]')).toBeVisible();
+		if (layout.className !== 'layout-wide') {
+			await expect(page.getByRole('timer')).toHaveCount(0);
+			await page.getByText('Info', { exact: true }).click();
+		}
+		await expect(page.getByRole('timer')).toBeVisible();
+		await expect(app).toHaveClass(new RegExp(layout.className));
 		expect(
 			await page.evaluate(() => ({
 				horizontal: document.documentElement.scrollWidth > innerWidth,

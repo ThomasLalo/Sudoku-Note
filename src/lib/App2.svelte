@@ -11,9 +11,10 @@
 	import Spotlight from '@lucide/svelte/icons/spotlight';
 	import SquareArrowRight from '@lucide/svelte/icons/square-arrow-right';
 	import Grid2x2Plus from '@lucide/svelte/icons/grid-2x2-plus';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import type { Cell } from './gridUtils';
 	import { initializeGrid, getAdjacentCell } from './gridUtils';
+	import { formatElapsedTime, isStandardSudokuComplete } from './puzzleLifecycle';
 	const keypadInts = [7, 8, 9, 4, 5, 6, 1, 2, 3];
 	const flippedKeypadInts = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 	type LayoutMode = 'wide' | 'side' | 'stacked';
@@ -42,8 +43,10 @@
 	let puzzlePhase: PuzzlePhase = $state('setup');
 	let openInfoSection: InfoSection | null = $state('guide');
 	let showSetupCandidates = $state(false);
+	let showLiveTimer = $state(false);
 	let startSolvingDialog: HTMLDialogElement;
 	let editPuzzleDialog: HTMLDialogElement;
+	let completionDialog: HTMLDialogElement;
 	let appContainer: HTMLDivElement;
 	let layoutMode: LayoutMode = $state('stacked');
 	let gridSize = $state(300);
@@ -72,6 +75,14 @@
 	let gridStateCols: Cell[][] = $derived(
 		gridStateRows[0].map((_, colIndex) => gridStateRows.map((row) => row[colIndex]))
 	);
+	let elapsedMilliseconds = $state(0);
+	let formattedElapsedTime = $derived(formatElapsedTime(elapsedMilliseconds));
+	let accumulatedActiveMilliseconds = 0;
+	let activeTimerStartedAt: number | null = null;
+	let timerUpdateId: ReturnType<typeof setInterval> | null = null;
+	let reopenCompletionAfterEditCancel = false;
+	let completionReturnFocus: HTMLElement | null = null;
+	let restoreCompletionFocusOnClose = true;
 
 	function reorganizeGrid(boxGrid: Cell[][]) {
 		const rowGrid: Cell[][] = [[], [], [], [], [], [], [], [], []];
@@ -112,7 +123,83 @@
 	}
 
 	function cellCanBeEdited(targetCell: Cell) {
-		return puzzlePhase === 'setup' || !targetCell.isClue;
+		return puzzlePhase === 'setup' || (puzzlePhase === 'solving' && !targetCell.isClue);
+	}
+
+	function clearTimerUpdates() {
+		if (timerUpdateId === null) return;
+		clearInterval(timerUpdateId);
+		timerUpdateId = null;
+	}
+
+	function refreshElapsedTime(now = performance.now()) {
+		elapsedMilliseconds =
+			accumulatedActiveMilliseconds +
+			(activeTimerStartedAt === null ? 0 : Math.max(0, now - activeTimerStartedAt));
+	}
+
+	function beginActiveTimerSegment() {
+		if (puzzlePhase !== 'solving' || document.hidden || activeTimerStartedAt !== null) return;
+
+		activeTimerStartedAt = performance.now();
+		refreshElapsedTime(activeTimerStartedAt);
+		if (timerUpdateId === null) {
+			timerUpdateId = setInterval(refreshElapsedTime, 250);
+		}
+	}
+
+	function pauseActiveTimerSegment() {
+		if (activeTimerStartedAt !== null) {
+			const now = performance.now();
+			accumulatedActiveMilliseconds += Math.max(0, now - activeTimerStartedAt);
+			activeTimerStartedAt = null;
+			elapsedMilliseconds = accumulatedActiveMilliseconds;
+		}
+		clearTimerUpdates();
+	}
+
+	function startSolveTimer() {
+		clearTimerUpdates();
+		accumulatedActiveMilliseconds = 0;
+		activeTimerStartedAt = null;
+		elapsedMilliseconds = 0;
+		beginActiveTimerSegment();
+	}
+
+	function resetSolveTimer() {
+		clearTimerUpdates();
+		accumulatedActiveMilliseconds = 0;
+		activeTimerStartedAt = null;
+		elapsedMilliseconds = 0;
+	}
+
+	function handleVisibilityChange() {
+		if (document.hidden) {
+			pauseActiveTimerSegment();
+		} else {
+			beginActiveTimerSegment();
+		}
+	}
+
+	function completePuzzleIfValid() {
+		if (puzzlePhase !== 'solving') return;
+
+		const values = gridStateRows.map((row) => row.map((cell) => cell.fillNumber));
+		if (!isStandardSudokuComplete(values)) return;
+
+		pauseActiveTimerSegment();
+		puzzlePhase = 'completed';
+		revealedNumber = null;
+		clearHeldModifiers();
+		const activeElement = document.activeElement;
+		completionReturnFocus =
+			activeElement instanceof HTMLElement &&
+			activeElement !== document.body &&
+			activeElement.getClientRects().length > 0
+				? activeElement
+				: document.querySelector<HTMLElement>('.sudoku-grid');
+		restoreCompletionFocusOnClose = true;
+		completionDialog.showModal();
 	}
 
 	function fillCell(targetCell: Cell, fillValue: number) {
@@ -187,6 +274,8 @@
 			revealedNumber = fillValue;
 			keypadMode = 'Reveal all candidates';
 		}
+
+		if (modeAtAction === 'Enter digit') completePuzzleIfValid();
 	}
 
 	function handleModifierKeyDown(event: KeyboardEvent) {
@@ -213,11 +302,33 @@
 		controlHeld = false;
 	}
 
+	function containDialogFocus(event: KeyboardEvent) {
+		if (event.key !== 'Tab') return;
+
+		const dialog = event.currentTarget as HTMLDialogElement;
+		const focusableElements = Array.from(
+			dialog.querySelectorAll<HTMLElement>('button:not(:disabled), [href], input:not(:disabled)')
+		);
+		const firstElement = focusableElements[0];
+		const lastElement = focusableElements.at(-1);
+		if (!firstElement || !lastElement) return;
+
+		if (event.shiftKey && document.activeElement === firstElement) {
+			event.preventDefault();
+			lastElement.focus();
+		} else if (!event.shiftKey && document.activeElement === lastElement) {
+			event.preventDefault();
+			firstElement.focus();
+		}
+	}
+
 	function showStartSolvingConfirmation() {
 		startSolvingDialog.showModal();
 	}
 
 	function startSolving() {
+		if (puzzlePhase !== 'setup') return;
+
 		for (const cell of gridStateRows.flat()) {
 			cell.isClue = cell.fillNumber !== null;
 		}
@@ -227,10 +338,51 @@
 		revealedNumber = null;
 		clearHeldModifiers();
 		startSolvingDialog.close();
+		startSolveTimer();
+		completePuzzleIfValid();
+		void tick().then(() => {
+			if (puzzlePhase === 'solving') {
+				document.querySelector<HTMLButtonElement>('.number-keypad button')?.focus();
+			}
+		});
 	}
 
 	function showEditPuzzleConfirmation() {
+		reopenCompletionAfterEditCancel = false;
 		editPuzzleDialog.showModal();
+	}
+
+	function showEditPuzzleFromCompletion() {
+		reopenCompletionAfterEditCancel = true;
+		restoreCompletionFocusOnClose = false;
+		completionDialog.close();
+		editPuzzleDialog.showModal();
+	}
+
+	function handleEditPuzzleDialogClose() {
+		if (reopenCompletionAfterEditCancel && puzzlePhase === 'completed') {
+			reopenCompletionAfterEditCancel = false;
+			completionDialog.showModal();
+			return;
+		}
+
+		reopenCompletionAfterEditCancel = false;
+	}
+
+	function dismissCompletionOverlay() {
+		completionDialog.close();
+	}
+
+	function handleCompletionDialogClose() {
+		if (!restoreCompletionFocusOnClose) {
+			restoreCompletionFocusOnClose = true;
+			return;
+		}
+
+		const returnFocus = completionReturnFocus;
+		void tick().then(() => {
+			if (returnFocus?.isConnected) returnFocus.focus();
+		});
 	}
 
 	function clearSelection() {
@@ -258,8 +410,17 @@
 		keypadMode = 'Enter digit';
 		revealedNumber = null;
 		multiSelect = false;
+		resetSolveTimer();
+		reopenCompletionAfterEditCancel = false;
+		completionReturnFocus = null;
 		clearHeldModifiers();
 		editPuzzleDialog.close();
+		void tick().then(() => {
+			const setupFocusTarget =
+				document.querySelector<HTMLButtonElement>('button[aria-label="Start solving"]') ??
+				document.querySelector<HTMLButtonElement>('#info-settings-trigger');
+			setupFocusTarget?.focus();
+		});
 	}
 
 	function toggleNoteLayout() {
@@ -272,6 +433,10 @@
 
 	function toggleReturnToRevealAfterEdits() {
 		returnToRevealAfterEdits = !returnToRevealAfterEdits;
+	}
+
+	function toggleLiveTimerVisibility() {
+		showLiveTimer = !showLiveTimer;
 	}
 
 	let keypadStrings = $derived(
@@ -391,8 +556,13 @@
 	onMount(() => {
 		const resizeObserver = new ResizeObserver(updateResponsiveLayout);
 		resizeObserver.observe(appContainer);
+		document.addEventListener('visibilitychange', handleVisibilityChange);
 		requestAnimationFrame(updateResponsiveLayout);
-		return () => resizeObserver.disconnect();
+		return () => {
+			resizeObserver.disconnect();
+			document.removeEventListener('visibilitychange', handleVisibilityChange);
+			clearTimerUpdates();
+		};
 	});
 </script>
 
@@ -416,6 +586,12 @@
 					<h1 class="puzzle-phase text-primary cascadia-code">
 						Puzzle {puzzlePhase === 'setup' ? 'setup' : puzzlePhase}
 					</h1>
+					{#if puzzlePhase !== 'setup' && showLiveTimer}
+						<p class="live-timer text-text cascadia-code" role="timer">
+							<span>Solve time</span>
+							<time>{formattedElapsedTime}</time>
+						</p>
+					{/if}
 					<div class="info-accordion cascadia-code">
 						<section class="accordion-item">
 							<h2>
@@ -446,10 +622,9 @@
 											from a newspaper, book, or another website.
 										</p>
 										<p>
-											Copy the numbers provided by that puzzle into the matching cells on
-											this grid, then press the start solving button.
-											The copied numbers will become fixed clues, and the solving tools will become
-											available.
+											Copy the numbers provided by that puzzle into the matching cells on this grid,
+											then press the start solving button. The copied numbers will become fixed
+											clues, and the solving tools will become available.
 										</p>
 									{:else}
 										<p>
@@ -572,6 +747,11 @@
 											label="Flipped notes"
 											onchangeHandler={toggleNoteLayout}
 											binder={flippedNotes}
+										/>
+										<TextSwitch
+											label="Show live timer"
+											onchangeHandler={toggleLiveTimerVisibility}
+											binder={showLiveTimer}
 										/>
 										{#if puzzlePhase !== 'setup'}
 											<TextSwitch
@@ -729,6 +909,7 @@
 	bind:this={startSolvingDialog}
 	data-preserve-grid-selection
 	aria-labelledby="start-solving-title"
+	onkeydown={containDialogFocus}
 >
 	<form method="dialog">
 		<h2 id="start-solving-title">Start solving?</h2>
@@ -745,6 +926,8 @@
 	bind:this={editPuzzleDialog}
 	data-preserve-grid-selection
 	aria-labelledby="edit-puzzle-title"
+	onclose={handleEditPuzzleDialogClose}
+	onkeydown={containDialogFocus}
 >
 	<form method="dialog">
 		<h2 id="edit-puzzle-title">Return to Setup?</h2>
@@ -754,6 +937,25 @@
 			<button type="button" onclick={returnToSetup}>Return to Setup</button>
 		</div>
 	</form>
+</dialog>
+
+<dialog
+	class="confirmation-dialog completion-dialog"
+	bind:this={completionDialog}
+	data-preserve-grid-selection
+	aria-labelledby="completion-title"
+	aria-describedby="completion-message"
+	onclose={handleCompletionDialogClose}
+	onkeydown={containDialogFocus}
+>
+	<h2 id="completion-title">Congratulations!</h2>
+	<p id="completion-message">
+		You completed the puzzle in <strong><time>{formattedElapsedTime}</time></strong>.
+	</p>
+	<div class="dialog-actions">
+		<button type="button" onclick={dismissCompletionOverlay}>View puzzle</button>
+		<button type="button" onclick={showEditPuzzleFromCompletion}>Edit puzzle</button>
+	</div>
 </dialog>
 
 <style lang="scss">
@@ -810,6 +1012,14 @@
 	.puzzle-phase {
 		margin-bottom: 1rem;
 		text-transform: capitalize;
+	}
+
+	.live-timer {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+		margin: -0.5rem 0 1rem;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.info-accordion {
