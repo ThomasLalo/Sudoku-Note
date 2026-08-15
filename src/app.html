@@ -4,9 +4,9 @@
 		<script lang="ts">
 			(function () {
 				try {
-					//try incase this code runs server-side where localStorage does not exist
+					// Apply the saved theme before rendering; App2 owns the settings switch.
 					const savedTheme = localStorage.getItem('theme');
-					if (savedTheme !== null) {
+					if (savedTheme === 'light' || savedTheme === 'dark') {
 						document.documentElement.dataset.theme = savedTheme;
 					}
 				} catch (e) {}

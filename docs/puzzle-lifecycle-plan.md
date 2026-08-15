@@ -342,17 +342,17 @@ Each phase should:
 - [x] Phase 1: Lifecycle and clue locking
 - [x] Phase 2: Completion and timer
 - [x] Phase 3: Versioned serialization
-- [ ] Phase 4: Local current-session restoration
+- [x] Phase 4: Local current-session restoration
 - [ ] Phase 5: Puzzle-definition import and export
 - [ ] Phase 6: Shareable puzzle links
 
 ## Current handoff
 
-- **Current phase:** Phase 4 is ready to begin. Phase 3 is implemented but remains uncommitted for
+- **Current phase:** Phase 5 is ready to begin. Phase 4 is implemented but remains uncommitted for
   review.
-- **Last completed phase:** Phase 3: Versioned serialization.
+- **Last completed phase:** Phase 4: Local current-session restoration.
 - **History note:** Commit `a153548` is the Phase 2 timer/completion implementation even though its
-  subject says "phase 3". The uncommitted serialization work described here is the plan's Phase 3.
+  subject says "phase 3". Commit `a92079c` is the plan's Phase 3 serialization implementation.
 - **Timer policy:** Count active, visible Solving time only. Hidden and closed intervals do not
   count; a restored Solving session should resume from its serialized accumulated elapsed time.
 - **Serialization format:** `src/lib/puzzleSerialization.ts` owns strict version 1 formats. A puzzle
@@ -370,20 +370,47 @@ Each phase should:
   than preserving unknown constraint data. Calculated candidates, DOM references, measurements,
   selection, tool state, layout/display preferences, the active `performance.now()` baseline, and
   the timer interval ID are excluded. This phase adds no storage, import/export, link, or other UI.
-- **Phase 4 timer handoff:** `calculateElapsedMilliseconds` is now the shared timer calculation used
-  by the live display. A serialization snapshot during active Solving must call it with the current
-  monotonic time and serialize that value, not the latest 250 ms display tick. When restoring
-  Solving, use the serialized elapsed value as accumulated active time and begin a new visible
-  segment only if the page is visible.
-- **Phase 3 verification:** `npm run check`, `npm run test:e2e` (54 tests), and `npm run build` pass.
-  The focused serialization/lifecycle run passes 10 tests. Playwright covers definition and session
-  round trips, runtime-field exclusion, clue-versus-entry restoration, annotations, active elapsed
-  time, malformed and unsupported data, atomic failures, and the existing wide, side, stacked, and
-  phone layout matrix. The Phase 3 files pass Prettier and the new pure utility/test files pass
-  ESLint directly. Repository-wide `npm run lint` remains blocked at its Prettier gate by the same
-  six pre-existing files: `package.json`, `playwright.config.ts`, `README.md`, `src/app.html`,
-  `src/lib/gridUtils.ts`, and `src/routes/+page.svelte`. Direct ESLint on the touched
-  `src/lib/App2.svelte` remains blocked by its pre-existing unused `getAdjacentCell` import.
+- **Phase 4 storage boundary:** `src/lib/puzzlePersistence.ts` owns the single
+  `sudoku-note-current-puzzle` local-storage record. Its strict envelope contains only the Phase 3
+  serialized puzzle-definition and solve-session strings. The app saves after serializable puzzle
+  edits and lifecycle changes, plus visibility/page-hide boundaries; the 250 ms timer-render tick
+  never writes storage. A snapshot of active Solving time is calculated at the write's current
+  monotonic time.
+- **Phase 4 restoration behavior:** Valid Setup, Solving, and Completed records replace the initial
+  blank state atomically during mount. Solving resumes from saved accumulated active time with a new
+  visible segment, so the closed interval is excluded. Completed restores its frozen time and
+  reopens the completion overlay; overlay dismissal remains transient and is not a session field.
+  Corrupt, partial, and unsupported envelopes are ignored without mutation or a crash. They are not
+  proactively deleted, so unsupported future data is not destroyed merely by opening an older app;
+  a later meaningful edit may replace it.
+- **User preference storage:** `src/lib/userPreferences.ts` owns a separate, strict version 1
+  `sudoku-note-user-preferences` record for Flipped notes, Show live timer, and Return to Reveal
+  after edits. Dark Mode now appears with the other Info settings but continues to use the existing
+  independent `theme` key as its sole source of persisted state; `src/app.html` applies that value
+  before rendering. Setup candidate visibility, selection, active tools, open panels, and responsive
+  layout state remain transient. Preferences never enter puzzle definitions, solve sessions,
+  exports, or future share links.
+- **Phase 4 clear behavior:** Settings now offers a confirmed **New puzzle** action in every phase.
+  It resets the in-memory puzzle and removes only the current-puzzle storage key. Theme, the Info
+  settings record, and other unrelated preferences remain untouched. A blank Setup is not stored,
+  and erasing the final Setup clue removes a previously valid current-puzzle record. This remains
+  one current session, not a saved-puzzle library.
+- **Phase 4 verification:** `npm run check`, `npm run test:e2e` (63 tests), and `npm run build` pass.
+  The focused persistence/lifecycle/mobile-layout run passes 21 tests. Playwright covers Setup,
+  Solving, and Completed reloads; clue-versus-entry identity; candidate annotations; active/hidden
+  timer behavior; storage-write frequency; invalid records; independent theme and versioned
+  Info-setting restoration; preference-safe clearing; and wide, side, stacked/phone dialog layouts.
+  The Phase 4 files pass Prettier and the new utility/test files pass ESLint directly.
+  Repository-wide `npm run lint` remains blocked at its Prettier gate by five pre-existing files:
+  `package.json`, `playwright.config.ts`, `README.md`, `src/lib/gridUtils.ts`, and
+  `src/routes/+page.svelte`. Direct ESLint on touched existing files remains blocked by the
+  pre-existing unused `getAdjacentCell` import in `src/lib/App2.svelte` and unused `grid` variable in
+  `tests/sudoku-grid.spec.ts`.
+- **Phase 5 handoff:** Import should validate a puzzle definition fully before offering to replace
+  the current session. After confirmed replacement, clear solver progress, initialize Setup from
+  the imported clues, and let the existing current-session persistence path save it. Export must use
+  the Phase 3 puzzle-definition serializer only; do not expose the Phase 4 storage envelope as a
+  portable file format.
 - **Scope guard:** Do not start optional public-facing features, a puzzle library, cloud storage,
   accounts, or concrete variant tools as part of these phases.
 

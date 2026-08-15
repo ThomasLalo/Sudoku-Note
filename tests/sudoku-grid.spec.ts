@@ -647,23 +647,7 @@ test('only hides the title when a short viewport is height limited', async ({ pa
 	await waitForGridHydration(page);
 
 	const title = page.locator('header h1');
-	const themeSwitch = page.locator('header .button-container');
-	const panelSelector = page.locator('.layout-button-container');
 	await expect(title).toBeVisible();
-
-	const themeBounds = await themeSwitch.boundingBox();
-	const selectorBounds = await panelSelector.boundingBox();
-	expect(themeBounds).not.toBeNull();
-	expect(selectorBounds).not.toBeNull();
-	if (!themeBounds || !selectorBounds) return;
-
-	const overlaps = !(
-		themeBounds.x + themeBounds.width <= selectorBounds.x ||
-		selectorBounds.x + selectorBounds.width <= themeBounds.x ||
-		themeBounds.y + themeBounds.height <= selectorBounds.y ||
-		selectorBounds.y + selectorBounds.height <= themeBounds.y
-	);
-	expect(overlaps).toBe(false);
 
 	await page.setViewportSize({ width: 900, height: 596 });
 	await expect(title).toBeHidden();

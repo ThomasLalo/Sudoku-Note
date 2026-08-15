@@ -126,8 +126,10 @@ test('uses touch-sized text controls on a coarse-pointer phone', async ({ browse
 	try {
 		await page.goto('/', { waitUntil: 'domcontentloaded' });
 		await waitForLayout(page);
+		await page.getByText('Info', { exact: true }).click();
+		await page.getByRole('button', { name: 'Settings', exact: true }).click();
 
-		const themeSwitch = await page.locator('header .text-switch').boundingBox();
+		const themeSwitch = await page.locator('label').filter({ hasText: 'Dark Mode' }).boundingBox();
 		const panelTabs = await page.locator('.layout-button-container .radio-container').all();
 		expect(themeSwitch).not.toBeNull();
 		expect(themeSwitch?.height).toBeGreaterThanOrEqual(43.5);

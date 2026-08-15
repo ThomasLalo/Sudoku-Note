@@ -385,7 +385,11 @@ test('keeps lifecycle controls usable in wide, side, and stacked layouts', async
 			await page.getByText('Info', { exact: true }).click();
 		}
 		await page.getByRole('button', { name: 'Settings', exact: true }).click();
-		await page.locator('label').filter({ hasText: 'Show live timer' }).click();
+		await expect(page.locator('label').filter({ hasText: 'Dark Mode' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'New puzzle', exact: true })).toBeVisible();
+		if (!(await page.getByLabel('Show live timer').isChecked())) {
+			await page.locator('label').filter({ hasText: 'Show live timer' }).click();
+		}
 		if (layout.className !== 'layout-wide') {
 			await page.getByText('Keypad', { exact: true }).click();
 		}
@@ -405,5 +409,21 @@ test('keeps lifecycle controls usable in wide, side, and stacked layouts', async
 				vertical: document.documentElement.scrollHeight > innerHeight
 			}))
 		).toEqual({ horizontal: false, vertical: false });
+
+		const settings = page.getByRole('button', { name: 'Settings', exact: true });
+		if ((await settings.getAttribute('aria-expanded')) === 'false') await settings.click();
+		await page.getByRole('button', { name: 'New puzzle', exact: true }).click();
+		const newPuzzleDialog = page.getByRole('dialog', { name: 'Start a new puzzle?' });
+		await expect(newPuzzleDialog).toBeVisible();
+		const dialogBounds = await newPuzzleDialog.boundingBox();
+		expect(dialogBounds).not.toBeNull();
+		if (dialogBounds) {
+			expect(dialogBounds.x).toBeGreaterThanOrEqual(0);
+			expect(dialogBounds.y).toBeGreaterThanOrEqual(0);
+			expect(dialogBounds.x + dialogBounds.width).toBeLessThanOrEqual(layout.width + 1);
+			expect(dialogBounds.y + dialogBounds.height).toBeLessThanOrEqual(layout.height + 1);
+		}
+		await newPuzzleDialog.getByRole('button', { name: 'New puzzle', exact: true }).click();
+		await expect(app).toHaveAttribute('data-puzzle-phase', 'setup');
 	}
 });

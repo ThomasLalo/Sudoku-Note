@@ -19,10 +19,21 @@
 		formatElapsedTime,
 		isStandardSudokuComplete
 	} from './puzzleLifecycle';
+	import {
+		currentPuzzleStorageKey,
+		decodeStoredPuzzleState,
+		encodeStoredPuzzleState
+	} from './puzzlePersistence';
+	import { serializePuzzleState, type PuzzlePhase } from './puzzleSerialization';
+	import {
+		createUserPreferences,
+		parseUserPreferences,
+		serializeUserPreferences,
+		userPreferencesStorageKey
+	} from './userPreferences';
 	const keypadInts = [7, 8, 9, 4, 5, 6, 1, 2, 3];
 	const flippedKeypadInts = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 	type LayoutMode = 'wide' | 'side' | 'stacked';
-	type PuzzlePhase = 'setup' | 'solving' | 'completed';
 	type InfoSection = 'rules' | 'guide' | 'controls' | 'settings';
 	const minimumKeySize = 32;
 	const preferredKeySize = 64;
@@ -46,10 +57,12 @@
 	let displayedPanel = $state('Keypad');
 	let puzzlePhase: PuzzlePhase = $state('setup');
 	let openInfoSection: InfoSection | null = $state('guide');
+	let darkMode = $state(false);
 	let showSetupCandidates = $state(false);
 	let showLiveTimer = $state(false);
 	let startSolvingDialog: HTMLDialogElement;
 	let editPuzzleDialog: HTMLDialogElement;
+	let newPuzzleDialog: HTMLDialogElement;
 	let completionDialog: HTMLDialogElement;
 	let appContainer: HTMLDivElement;
 	let layoutMode: LayoutMode = $state('stacked');
@@ -87,6 +100,8 @@
 	let reopenCompletionAfterEditCancel = false;
 	let completionReturnFocus: HTMLElement | null = null;
 	let restoreCompletionFocusOnClose = true;
+	let lastSavedPuzzleStorageValue: string | null = null;
+	let lastSavedUserPreferencesValue: string | null = null;
 
 	function reorganizeGrid(boxGrid: Cell[][]) {
 		const rowGrid: Cell[][] = [[], [], [], [], [], [], [], [], []];
@@ -144,6 +159,139 @@
 		);
 	}
 
+	function currentElapsedSnapshot(now = performance.now()) {
+		return puzzlePhase === 'solving'
+			? calculateElapsedMilliseconds(accumulatedActiveMilliseconds, activeTimerStartedAt, now)
+			: elapsedMilliseconds;
+	}
+
+	function hasMeaningfulPuzzleState() {
+		return puzzlePhase !== 'setup' || gridStateRows.flat().some((cell) => cell.fillNumber !== null);
+	}
+
+	function persistCurrentPuzzle() {
+		if (!hasMeaningfulPuzzleState()) {
+			if (lastSavedPuzzleStorageValue === null) return;
+			try {
+				localStorage.removeItem(currentPuzzleStorageKey);
+				lastSavedPuzzleStorageValue = null;
+			} catch {
+				// Browser storage can be unavailable; the in-memory puzzle should remain usable.
+			}
+			return;
+		}
+
+		try {
+			const value = encodeStoredPuzzleState(
+				serializePuzzleState(gridState, puzzlePhase, currentElapsedSnapshot())
+			);
+			if (value === lastSavedPuzzleStorageValue) return;
+
+			localStorage.setItem(currentPuzzleStorageKey, value);
+			lastSavedPuzzleStorageValue = value;
+		} catch {
+			// Saving must not interrupt puzzle interaction when storage is unavailable.
+		}
+	}
+
+	function restoreCurrentPuzzle() {
+		let storedValue: string | null;
+		try {
+			storedValue = localStorage.getItem(currentPuzzleStorageKey);
+		} catch {
+			return;
+		}
+		if (storedValue === null) return;
+
+		const restored = decodeStoredPuzzleState(storedValue);
+		if (!restored.ok) return;
+
+		clearTimerUpdates();
+		gridState = restored.value.gridState;
+		puzzlePhase = restored.value.puzzlePhase;
+		elapsedMilliseconds = restored.value.elapsedMilliseconds;
+		accumulatedActiveMilliseconds = restored.value.elapsedMilliseconds;
+		activeTimerStartedAt = null;
+		lastSavedPuzzleStorageValue = storedValue;
+
+		if (puzzlePhase === 'solving') {
+			beginActiveTimerSegment();
+		} else if (puzzlePhase === 'completed') {
+			void tick().then(() => {
+				if (puzzlePhase !== 'completed' || completionDialog.open) return;
+				completionReturnFocus = document.querySelector<HTMLElement>('.sudoku-grid');
+				restoreCompletionFocusOnClose = true;
+				completionDialog.showModal();
+			});
+		}
+	}
+
+	function clearStoredPuzzle() {
+		try {
+			localStorage.removeItem(currentPuzzleStorageKey);
+			lastSavedPuzzleStorageValue = null;
+		} catch {
+			// Beginning fresh should still work in memory if browser storage is unavailable.
+		}
+	}
+
+	function applyTheme() {
+		document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
+	}
+
+	function persistTheme() {
+		try {
+			localStorage.setItem('theme', darkMode ? 'dark' : 'light');
+		} catch {
+			// The selected theme remains active for the current page if browser storage is unavailable.
+		}
+	}
+
+	function restoreTheme() {
+		let savedTheme: string | null;
+		try {
+			savedTheme = localStorage.getItem('theme');
+		} catch {
+			return;
+		}
+
+		darkMode = savedTheme === 'dark';
+		applyTheme();
+	}
+
+	function persistUserPreferences() {
+		try {
+			const value = serializeUserPreferences(
+				createUserPreferences(flippedNotes, showLiveTimer, returnToRevealAfterEdits)
+			);
+			if (value === lastSavedUserPreferencesValue) return;
+
+			localStorage.setItem(userPreferencesStorageKey, value);
+			lastSavedUserPreferencesValue = value;
+		} catch {
+			// Preferences remain usable for the current page if browser storage is unavailable.
+		}
+	}
+
+	function restoreUserPreferences() {
+		let storedValue: string | null;
+		try {
+			storedValue = localStorage.getItem(userPreferencesStorageKey);
+		} catch {
+			return;
+		}
+
+		if (storedValue === null) return;
+
+		const restored = parseUserPreferences(storedValue);
+		if (!restored.ok) return;
+
+		flippedNotes = restored.value.flippedNotes;
+		showLiveTimer = restored.value.showLiveTimer;
+		returnToRevealAfterEdits = restored.value.returnToRevealAfterEdits;
+		lastSavedUserPreferencesValue = storedValue;
+	}
+
 	function beginActiveTimerSegment() {
 		if (puzzlePhase !== 'solving' || document.hidden || activeTimerStartedAt !== null) return;
 
@@ -182,9 +330,19 @@
 	function handleVisibilityChange() {
 		if (document.hidden) {
 			pauseActiveTimerSegment();
+			persistCurrentPuzzle();
 		} else {
 			beginActiveTimerSegment();
 		}
+	}
+
+	function handlePageHide() {
+		pauseActiveTimerSegment();
+		persistCurrentPuzzle();
+	}
+
+	function handlePageShow() {
+		beginActiveTimerSegment();
 	}
 
 	function completePuzzleIfValid() {
@@ -227,12 +385,15 @@
 
 	function clearCells(targetCells: Cell[]) {
 		const editableCells = targetCells.filter(cellCanBeEdited);
+		if (editableCells.length === 0) return;
+
 		const affectedCells = new Set(editableCells.flatMap((cell) => getSeenCells(cell)));
 		for (const cell of editableCells) {
 			cell.fillNumber = null;
 			cell.isClue = false;
 		}
 		recalculateCandidates(affectedCells);
+		persistCurrentPuzzle();
 	}
 
 	function handleKeypadNumber(fillValue: number, inputSource: NumberInputSource = 'keyboard') {
@@ -282,6 +443,9 @@
 		}
 
 		if (modeAtAction === 'Enter digit') completePuzzleIfValid();
+		if (modeAtAction !== 'Reveal all candidates' && selectedCells.length > 0) {
+			persistCurrentPuzzle();
+		}
 	}
 
 	function handleModifierKeyDown(event: KeyboardEvent) {
@@ -346,6 +510,7 @@
 		startSolvingDialog.close();
 		startSolveTimer();
 		completePuzzleIfValid();
+		persistCurrentPuzzle();
 		void tick().then(() => {
 			if (puzzlePhase === 'solving') {
 				document.querySelector<HTMLButtonElement>('.number-keypad button')?.focus();
@@ -356,6 +521,10 @@
 	function showEditPuzzleConfirmation() {
 		reopenCompletionAfterEditCancel = false;
 		editPuzzleDialog.showModal();
+	}
+
+	function showNewPuzzleConfirmation() {
+		newPuzzleDialog.showModal();
 	}
 
 	function showEditPuzzleFromCompletion() {
@@ -421,6 +590,7 @@
 		completionReturnFocus = null;
 		clearHeldModifiers();
 		editPuzzleDialog.close();
+		persistCurrentPuzzle();
 		void tick().then(() => {
 			const setupFocusTarget =
 				document.querySelector<HTMLButtonElement>('button[aria-label="Start solving"]') ??
@@ -429,8 +599,37 @@
 		});
 	}
 
+	function beginFreshPuzzle() {
+		clearSelection();
+		resetSolveTimer();
+		gridState = initializeGrid();
+		puzzlePhase = 'setup';
+		displayedPanel = 'Keypad';
+		openInfoSection = 'guide';
+		showSetupCandidates = false;
+		keypadMode = 'Enter digit';
+		revealedNumber = null;
+		multiSelect = false;
+		reopenCompletionAfterEditCancel = false;
+		completionReturnFocus = null;
+		restoreCompletionFocusOnClose = true;
+		clearHeldModifiers();
+		clearStoredPuzzle();
+		newPuzzleDialog.close();
+		void tick().then(() => {
+			document.querySelector<HTMLButtonElement>('button[aria-label="Start solving"]')?.focus();
+		});
+	}
+
+	function toggleDarkMode() {
+		darkMode = !darkMode;
+		applyTheme();
+		persistTheme();
+	}
+
 	function toggleNoteLayout() {
 		flippedNotes = !flippedNotes;
+		persistUserPreferences();
 	}
 
 	function toggleInfoSection(section: InfoSection) {
@@ -439,10 +638,12 @@
 
 	function toggleReturnToRevealAfterEdits() {
 		returnToRevealAfterEdits = !returnToRevealAfterEdits;
+		persistUserPreferences();
 	}
 
 	function toggleLiveTimerVisibility() {
 		showLiveTimer = !showLiveTimer;
+		persistUserPreferences();
 	}
 
 	let keypadStrings = $derived(
@@ -560,13 +761,20 @@
 	}
 
 	onMount(() => {
+		restoreTheme();
+		restoreUserPreferences();
+		restoreCurrentPuzzle();
 		const resizeObserver = new ResizeObserver(updateResponsiveLayout);
 		resizeObserver.observe(appContainer);
 		document.addEventListener('visibilitychange', handleVisibilityChange);
+		window.addEventListener('pagehide', handlePageHide);
+		window.addEventListener('pageshow', handlePageShow);
 		requestAnimationFrame(updateResponsiveLayout);
 		return () => {
 			resizeObserver.disconnect();
 			document.removeEventListener('visibilitychange', handleVisibilityChange);
+			window.removeEventListener('pagehide', handlePageHide);
+			window.removeEventListener('pageshow', handlePageShow);
 			clearTimerUpdates();
 		};
 	});
@@ -750,6 +958,11 @@
 								>
 									<div class="settings-switches">
 										<TextSwitch
+											label="Dark Mode"
+											onchangeHandler={toggleDarkMode}
+											binder={darkMode}
+										/>
+										<TextSwitch
 											label="Flipped notes"
 											onchangeHandler={toggleNoteLayout}
 											binder={flippedNotes}
@@ -766,11 +979,16 @@
 												binder={returnToRevealAfterEdits}
 											/>
 											<button
-												class="edit-puzzle-button cascadia-code"
+												class="settings-action-button cascadia-code"
 												data-preserve-grid-selection
 												onclick={showEditPuzzleConfirmation}>Edit puzzle</button
 											>
 										{/if}
+										<button
+											class="settings-action-button cascadia-code"
+											data-preserve-grid-selection
+											onclick={showNewPuzzleConfirmation}>New puzzle</button
+										>
 									</div>
 								</div>
 							{/if}
@@ -923,6 +1141,23 @@
 		<div class="dialog-actions">
 			<button>Cancel</button>
 			<button type="button" onclick={startSolving}>Start solving</button>
+		</div>
+	</form>
+</dialog>
+
+<dialog
+	class="confirmation-dialog"
+	bind:this={newPuzzleDialog}
+	data-preserve-grid-selection
+	aria-labelledby="new-puzzle-title"
+	onkeydown={containDialogFocus}
+>
+	<form method="dialog">
+		<h2 id="new-puzzle-title">Start a new puzzle?</h2>
+		<p>This will clear the current puzzle and solving progress from this browser.</p>
+		<div class="dialog-actions">
+			<button>Cancel</button>
+			<button type="button" onclick={beginFreshPuzzle}>New puzzle</button>
 		</div>
 	</form>
 </dialog>
@@ -1092,7 +1327,7 @@
 		margin-top: 0;
 	}
 
-	.edit-puzzle-button {
+	.settings-action-button {
 		min-height: var(--text-control-height);
 		padding: 0.35rem 0.75rem;
 		border: 2px solid var(--color-secondary);
@@ -1101,8 +1336,8 @@
 		cursor: pointer;
 	}
 
-	.edit-puzzle-button:hover,
-	.edit-puzzle-button:focus-visible {
+	.settings-action-button:hover,
+	.settings-action-button:focus-visible {
 		color: var(--color-background-lightest);
 		background: var(--color-secondary);
 	}
