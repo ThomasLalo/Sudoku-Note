@@ -151,20 +151,24 @@ feature can subsequently preserve the new solve session.
 Share links contain the puzzle definition only. They must not include solver answers, notes,
 highlights, elapsed time, completion state, theme, or other personal settings.
 
-The expected share-link shape is a versioned, encoded definition in the URL fragment:
+The share-link shape is a versioned, encoded definition in the URL fragment:
 
 ```text
-https://example.com/#p=encoded-puzzle-definition
+https://example.com/#p=2.base64url-compressed-puzzle-definition
 ```
 
 The URL codec must be versioned separately from the puzzle-definition schema so either can evolve
-without being confused with the other. Start with a readable and reliable encoding for the current
-clue-only definition and enforce a practical payload-size limit. If a payload is too large, fail
-safely with a useful message rather than producing an unreliable link.
+without being confused with the other. Codec version 2 compresses the serialized puzzle-definition
+JSON with zlib-wrapped Deflate through Pako, then encodes the result as unpadded base64url. It has no
+second JSON envelope. Enforce practical encoded and decompressed payload-size limits; if either is
+too large, fail safely with a useful message rather than producing or inflating an unreliable link.
+The experimental codec-version-1 links were used only for testing and are deliberately unsupported
+rather than carried as legacy decoding code.
 
 Real variant-constraint formats should be measured with deliberately dense representative puzzles
-when they are added. Add compression when those measurements justify it. Puzzle-definition file
-import/export is deferred rather than required as an oversized-link fallback.
+when they are added. Their data belongs in a future version of the puzzle-definition schema inside
+the existing compressed transport. Puzzle-definition file import/export is deferred rather than
+required as an oversized-link fallback.
 
 ## Explicit non-goals
 
@@ -178,7 +182,8 @@ The following are intentionally outside this plan:
 - Blocking validation during Setup
 - Implementing variant-constraint editing tools
 - Puzzle-definition file import/export
-- Premature URL compression or a generalized migration framework
+- Backward-compatible handling for experimental codec-version-1 links or a generalized migration
+  framework
 
 These can be reconsidered in response to an actual personal need or user demand.
 
@@ -311,7 +316,7 @@ Acceptance criteria:
 - The feature works on static hosting and requires no database.
 - Existing local sessions are not silently overwritten by opening a link.
 - An impractically large payload is rejected with a useful message and leaves current state intact.
-- Compression is not added unless link size demonstrates a practical need.
+- Compression uses a maintained library and decoding enforces both encoded and inflated size limits.
 
 ## Verification expectations
 
@@ -347,11 +352,14 @@ Each phase should:
 
 ## Current handoff
 
-- **Current phase:** All planned phases are complete; Phase 5 is implemented and ready for review.
+- **Current phase:** All planned phases are complete; Phase 5's compressed share codec is ready for
+  review.
 - **Last completed phase:** Phase 5: Shareable puzzle links.
 - **History note:** Commit `a153548` is the Phase 2 timer/completion implementation even though its
   subject says "phase 3". Commit `a92079c` is the plan's Phase 3 serialization implementation, and
-  commit `e63059f` is the accepted Phase 4 local-persistence implementation.
+  commit `e63059f` is the accepted Phase 4 local-persistence implementation. Commit `96bdd4d` is the
+  original Phase 5 share-link implementation; the codec-version-2 compression refinement described
+  below is currently uncommitted.
 - **Timer policy:** Count active, visible Solving time only. Hidden and closed intervals do not
   count; a restored Solving session should resume from its serialized accumulated elapsed time.
 - **Serialization format:** `src/lib/puzzleSerialization.ts` owns strict version 1 formats. A puzzle
@@ -406,12 +414,14 @@ Each phase should:
   `src/routes/+page.svelte`. Direct ESLint on touched existing files remains blocked by the
   pre-existing unused `getAdjacentCell` import in `src/lib/App2.svelte` and unused `grid` variable in
   `tests/sudoku-grid.spec.ts`.
-- **Phase 5 URL codec:** `src/lib/puzzleSharing.ts` owns strict URL-codec version 1. The `#p=` value
-  is UTF-8 JSON encoded as unpadded base64url. Its envelope contains only its own format/version and
-  the serialized Phase 3 puzzle definition; the puzzle-definition version remains inside that
-  serialized definition and can evolve independently. The encoded payload limit is 4,096
-  characters. A fully filled current-schema definition produces a 404-character payload
-  (407-character fragment), so compression is not justified for the clue-only format.
+- **Phase 5 URL codec:** `src/lib/puzzleSharing.ts` owns strict URL-codec version 2. Its wire format is
+  `#p=2.<base64url>`, where the base64url bytes are a Pako-generated, zlib-wrapped Deflate stream of
+  the serialized Phase 3 puzzle definition. There is no redundant share envelope; the definition's
+  own format/version remains inside the compressed JSON and can evolve independently. Both the
+  complete `p` value (4,096 characters) and inflated definition (64 KiB) are bounded. A fully filled
+  current-schema definition now produces a 122-character payload (125-character fragment). The
+  example link that motivated the change is 188 characters in full. Codec-version-1 links are
+  deliberately rejected instead of supported through legacy code.
 - **Phase 5 sharing behavior:** Settings offers **Share puzzle**, with a read-only URL and clipboard
   action plus a manual-copy fallback. Solver entries, annotations, elapsed time, lifecycle phase,
   and settings never enter the codec. On page load, a valid shared definition is fully decoded and
@@ -420,20 +430,26 @@ Each phase should:
   uses normal Phase 4 persistence. Canceling or acknowledging an invalid, unsupported, ambiguous,
   or oversized link preserves the current session. Consumed `p` fragments are removed with
   `history.replaceState` so reloads do not prompt again.
-- **Phase 5 verification:** `npm run check`, `npm run test:e2e` (71 tests), and `npm run build` pass.
-  The focused Phase 5 suite passes 8 tests, and the affected serialization/lifecycle/persistence/
-  responsive-layout run passes 33 tests. Playwright covers definition-only codec round trips,
-  clipboard output, fresh Setup loading and persistence, replacement confirmation/cancellation,
-  atomic corrupt/unsupported/oversized failures, and dialog bounds in wide, side, and stacked phone
-  layouts. The Phase 5 files pass Prettier, and the new codec/test plus serialization files pass
-  ESLint directly. Repository-wide `npm run lint` remains blocked at its Prettier gate by the same
-  five pre-existing files: `package.json`, `playwright.config.ts`, `README.md`,
-  `src/lib/gridUtils.ts`, and `src/routes/+page.svelte`. Direct lint of `src/lib/App2.svelte`
-  remains blocked only by its pre-existing unused `getAdjacentCell` import.
-- **Future format decision:** Keep the readable uncompressed codec until concrete variant
-  constraints exist. When they do, measure deliberately dense representative definitions against
-  the 4,096-character limit before deciding whether a new codec version needs compression. File
-  import/export remains deferred rather than becoming an oversized-link fallback.
+- **Phase 5 verification:** `npm run check`, `npm run build`, the focused Phase 5 suite (8 tests),
+  and the full suite at lower contention (`npm run test:e2e -- --workers=3`, 71 tests) pass.
+  Playwright covers compressed definition-only round trips, rejection of experimental v1 links,
+  bounded decompression, clipboard output, fresh Setup loading and persistence, replacement
+  confirmation/cancellation, atomic corrupt/unsupported/oversized failures, and dialog bounds in
+  wide, side, and stacked phone layouts. Two default six-worker full runs passed 69 and 68 tests;
+  their variable failures were existing five-second mobile-layout initialization assertions plus
+  an exact real-time timer assertion. The initially failed cases passed on isolated rerun, and all
+  71 pass with three workers. All changed files pass Prettier, and the changed TypeScript/test files
+  pass ESLint directly. Repository-wide `npm run lint` remains blocked at its Prettier gate by four
+  pre-existing files: `playwright.config.ts`, `README.md`, `src/lib/gridUtils.ts`, and
+  `src/routes/+page.svelte`.
+- **Dependency/security note:** Pako 3.0.1 is the codec's sole new runtime dependency. Its install
+  adds no transitive runtime package. `npm audit --omit=dev` reports no Pako advisory; it continues
+  to report the existing moderate Svelte advisories, which are outside this codec-only change.
+- **Future format decision:** Future variant constraints should extend a new puzzle-definition
+  schema version inside codec v2, so adding them does not require changing the URL transport. Only
+  change the codec version if the transport or compression format itself changes. Continue to
+  measure dense representative definitions against both limits. File import/export remains
+  deferred rather than becoming an oversized-link fallback.
 - **Scope guard:** Do not start optional public-facing features, a puzzle library, cloud storage,
   accounts, or concrete variant tools as part of these phases.
 
@@ -443,7 +459,8 @@ Each phase should:
 Read docs/puzzle-lifecycle-plan.md completely, then inspect the current implementation and git
 status.
 
-Review the uncommitted Phase 5 implementation against the plan's scope and acceptance criteria.
+Review the uncommitted Phase 5 codec-version-2 compression refinement against the plan's scope and
+acceptance criteria.
 Do not start or partially implement any deferred feature.
 
 Verify the focused tests, repository gates, and affected responsive layouts. Preserve the existing

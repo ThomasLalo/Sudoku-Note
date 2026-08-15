@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { deflate, inflate } from 'pako';
 import { initializeGrid, type Cell } from '../src/lib/gridUtils';
 import { currentPuzzleStorageKey } from '../src/lib/puzzlePersistence';
 import {
@@ -9,9 +10,9 @@ import {
 import {
 	createShareUrl,
 	decodeSharedPuzzleFragment,
+	maximumDecompressedDefinitionLength,
 	maximumSharePayloadLength,
-	shareLinkCodecVersion,
-	shareLinkFormat
+	shareLinkCodecVersion
 } from '../src/lib/puzzleSharing';
 
 function rowMajorCells(gridState: Cell[][]) {
@@ -25,20 +26,32 @@ function rowMajorCells(gridState: Cell[][]) {
 		);
 }
 
-function encodeBase64Url(value: string) {
-	const bytes = new TextEncoder().encode(value);
+function encodeBase64Url(bytes: Uint8Array) {
 	let binary = '';
 	for (const byte of bytes) binary += String.fromCharCode(byte);
 	return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
 }
 
-function encodedEnvelope(puzzleDefinition: string, version = shareLinkCodecVersion) {
+function decodeBase64Url(value: string) {
+	const base64 = value.replaceAll('-', '+').replaceAll('_', '/');
+	const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '='));
+	return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+function compressedPayload(puzzleDefinition: string, version = shareLinkCodecVersion) {
+	const compressed = deflate(new TextEncoder().encode(puzzleDefinition), { level: 9 });
+	return `${version}.${encodeBase64Url(compressed)}`;
+}
+
+function legacyEnvelope(puzzleDefinition: string) {
 	return encodeBase64Url(
-		JSON.stringify({
-			format: shareLinkFormat,
-			version,
-			puzzleDefinition
-		})
+		new TextEncoder().encode(
+			JSON.stringify({
+				format: 'sudoku-note-share-link',
+				version: 1,
+				puzzleDefinition
+			})
+		)
 	);
 }
 
@@ -87,17 +100,17 @@ test('round-trips only the versioned puzzle definition through a separately vers
 
 	const url = new URL(result.value);
 	expect(url.origin + url.pathname + url.search).toBe('https://example.com/sudoku/?source=paper');
-	expect(url.hash).toMatch(/^#p=[A-Za-z0-9_-]+$/);
+	expect(url.hash).toMatch(/^#p=2\.[A-Za-z0-9_-]+$/);
+	expect(url.hash.length).toBeLessThan(250);
 
-	const payload = url.hash.slice(3).replaceAll('-', '+').replaceAll('_', '/');
-	const envelope = JSON.parse(atob(payload.padEnd(Math.ceil(payload.length / 4) * 4, '='))) as {
-		format: string;
-		version: number;
-		puzzleDefinition: string;
-	};
-	expect(Object.keys(envelope).sort()).toEqual(['format', 'puzzleDefinition', 'version']);
-	expect(envelope).toMatchObject({ format: shareLinkFormat, version: shareLinkCodecVersion });
-	expect(JSON.parse(envelope.puzzleDefinition)).toMatchObject({
+	const [codecVersion, encodedDefinition] = url.hash.slice(3).split('.');
+	expect(Number(codecVersion)).toBe(shareLinkCodecVersion);
+	const serializedDefinition = new TextDecoder().decode(
+		inflate(decodeBase64Url(encodedDefinition))
+	);
+	const sharedDefinition = JSON.parse(serializedDefinition) as Record<string, unknown>;
+	expect(Object.keys(sharedDefinition).sort()).toEqual(['clues', 'format', 'version']);
+	expect(sharedDefinition).toMatchObject({
 		version: puzzleDefinitionVersion,
 		clues: expect.any(Array)
 	});
@@ -129,14 +142,26 @@ test('strictly rejects corrupt, unsupported, ambiguous, and oversized fragments'
 		error: { code: 'invalid-data' }
 	});
 	expect(
-		decodeSharedPuzzleFragment(`#p=${encodedEnvelope(definition)}&unexpected=value`)
+		decodeSharedPuzzleFragment(`#p=${compressedPayload(definition)}&unexpected=value`)
 	).toMatchObject({ kind: 'error', error: { code: 'invalid-data' } });
 	expect(
-		decodeSharedPuzzleFragment(`#p=${encodedEnvelope(definition, shareLinkCodecVersion + 1)}`)
+		decodeSharedPuzzleFragment(`#p=${compressedPayload(definition, shareLinkCodecVersion + 1)}`)
 	).toMatchObject({ kind: 'error', error: { code: 'unsupported-version' } });
-	expect(decodeSharedPuzzleFragment(`#p=${encodedEnvelope(unsupportedDefinition)}`)).toMatchObject({
+	expect(
+		decodeSharedPuzzleFragment(`#p=${compressedPayload(unsupportedDefinition)}`)
+	).toMatchObject({
 		kind: 'error',
 		error: { code: 'unsupported-version' }
+	});
+	expect(decodeSharedPuzzleFragment(`#p=${legacyEnvelope(definition)}`)).toMatchObject({
+		kind: 'error',
+		error: { code: 'invalid-data' }
+	});
+	const expansionBomb = compressedPayload('x'.repeat(maximumDecompressedDefinitionLength + 1));
+	expect(expansionBomb.length).toBeLessThan(maximumSharePayloadLength);
+	expect(decodeSharedPuzzleFragment(`#p=${expansionBomb}`)).toMatchObject({
+		kind: 'error',
+		error: { code: 'payload-too-large' }
 	});
 	expect(
 		decodeSharedPuzzleFragment(`#p=${'a'.repeat(maximumSharePayloadLength + 1)}`)
@@ -179,7 +204,7 @@ test('generates and copies a link that opens as a fresh persisted Setup puzzle',
 	const shareInput = shareDialog.getByLabel('Share URL');
 	await expect(shareInput).toHaveAttribute('readonly', '');
 	const shareUrl = await shareInput.inputValue();
-	expect(new URL(shareUrl).hash).toMatch(/^#p=[A-Za-z0-9_-]+$/);
+	expect(new URL(shareUrl).hash).toMatch(/^#p=2\.[A-Za-z0-9_-]+$/);
 
 	await shareDialog.getByRole('button', { name: 'Copy link' }).click();
 	await expect(shareDialog.getByRole('status')).toHaveText('Share link copied.');
@@ -287,7 +312,7 @@ test('reports invalid, unsupported, and oversized links without mutating current
 	const cases = [
 		{ hash: '#p=not_json', message: 'invalid or damaged' },
 		{
-			hash: `#p=${encodedEnvelope(definition, shareLinkCodecVersion + 1)}`,
+			hash: `#p=${compressedPayload(definition, shareLinkCodecVersion + 1)}`,
 			message: 'does not support'
 		},
 		{
