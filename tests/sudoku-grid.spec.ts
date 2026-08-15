@@ -3,6 +3,13 @@ import { expect, test } from '@playwright/test';
 async function waitForGridHydration(page: import('@playwright/test').Page) {
 	await page.locator('.sudoku-cell').first().waitFor({ state: 'visible' });
 	await page.waitForLoadState('networkidle');
+	const startSolvingButton = page.getByRole('button', { name: 'Start solving', exact: true });
+	if (await startSolvingButton.isVisible()) {
+		await startSolvingButton.click();
+		const dialog = page.getByRole('dialog', { name: 'Start solving?' });
+		await dialog.getByRole('button', { name: 'Start solving', exact: true }).click();
+		await expect(page.locator('.app-container')).toHaveAttribute('data-puzzle-phase', 'solving');
+	}
 }
 
 test('renders and selects cells in the layered Sudoku grid', async ({ page }) => {
@@ -153,6 +160,7 @@ test('keeps edit tools sticky when return to reveal is disabled', async ({ page 
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
 	await waitForGridHydration(page);
 
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
 	const returnSetting = page.getByLabel('Return to Reveal after edits');
 	await expect(returnSetting).toBeChecked();
 	await page.locator('label').filter({ hasText: 'Return to Reveal after edits' }).click();
@@ -442,6 +450,7 @@ test('switches notes and keypad between standard and flipped layouts', async ({ 
 	).toEqual(['7', '8', '9', '4', '5', '6', '1', '2', '3']);
 	expect(await getKeypadOrder()).toEqual(['7', '8', '9', '4', '5', '6', '1', '2', '3']);
 
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
 	await page.locator('label').filter({ hasText: 'Flipped notes' }).click();
 	expect(
 		await firstCellCandidates.evaluateAll((candidates) =>
@@ -1070,7 +1079,9 @@ test('compensates for the bottom Info button edge without overflowing a roomy pa
 	const geometry = await page.locator('.info-content').evaluate((info) => {
 		const styles = getComputedStyle(info);
 		const keypad = document.querySelector<HTMLElement>('.keypad-content');
-		const infoButtonEdge = info.querySelector<HTMLElement>('.button-right-parallelogram');
+		const buttonEdgeProbe = document.querySelector<HTMLElement>(
+			'.right-panel .button-right-parallelogram'
+		);
 		const bounds = info.getBoundingClientRect();
 		const firstChildBounds = info.firstElementChild?.getBoundingClientRect();
 		const paddingLeft = Number.parseFloat(styles.paddingLeft);
@@ -1079,7 +1090,7 @@ test('compensates for the bottom Info button edge without overflowing a roomy pa
 		return {
 			paddingLeft,
 			paddingBottom: Number.parseFloat(styles.paddingBottom),
-			buttonEdge: infoButtonEdge ? Number.parseFloat(getComputedStyle(infoButtonEdge).width) : 0,
+			buttonEdge: buttonEdgeProbe ? Number.parseFloat(getComputedStyle(buttonEdgeProbe).width) : 0,
 			keypadPaddingLeft: keypad ? Number.parseFloat(getComputedStyle(keypad).paddingLeft) : 0,
 			firstChildInset: firstChildBounds ? firstChildBounds.left - bounds.left - borderLeft : 0,
 			overflowY: styles.overflowY,

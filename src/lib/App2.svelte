@@ -17,6 +17,8 @@
 	const keypadInts = [7, 8, 9, 4, 5, 6, 1, 2, 3];
 	const flippedKeypadInts = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 	type LayoutMode = 'wide' | 'side' | 'stacked';
+	type PuzzlePhase = 'setup' | 'solving' | 'completed';
+	type InfoSection = 'rules' | 'guide' | 'controls' | 'settings';
 	const minimumKeySize = 32;
 	const preferredKeySize = 64;
 	const minimumUsefulGridSize = 270;
@@ -37,6 +39,11 @@
 	];
 
 	let displayedPanel = $state('Keypad');
+	let puzzlePhase: PuzzlePhase = $state('setup');
+	let openInfoSection: InfoSection | null = $state('guide');
+	let showSetupCandidates = $state(false);
+	let startSolvingDialog: HTMLDialogElement;
+	let editPuzzleDialog: HTMLDialogElement;
 	let appContainer: HTMLDivElement;
 	let layoutMode: LayoutMode = $state('stacked');
 	let gridSize = $state(300);
@@ -104,13 +111,16 @@
 		return visibleCells;
 	}
 
+	function cellCanBeEdited(targetCell: Cell) {
+		return puzzlePhase === 'setup' || !targetCell.isClue;
+	}
+
 	function fillCell(targetCell: Cell, fillValue: number) {
+		if (!cellCanBeEdited(targetCell)) return;
+
 		targetCell.fillNumber = fillValue;
-		const seenCells = getSeenCells(targetCell);
-		for (const cell of seenCells!) {
-			// cells will always exist and see each other
-			cell.candidates[keypadInts.indexOf(fillValue)] = false;
-		}
+		targetCell.isClue = puzzlePhase === 'setup';
+		recalculateCandidates(getSeenCells(targetCell));
 	}
 
 	function recalculateCandidates(cells: Iterable<Cell>) {
@@ -123,16 +133,18 @@
 	}
 
 	function clearCells(targetCells: Cell[]) {
-		const affectedCells = new Set(targetCells.flatMap((cell) => getSeenCells(cell)));
-		for (const cell of targetCells) {
+		const editableCells = targetCells.filter(cellCanBeEdited);
+		const affectedCells = new Set(editableCells.flatMap((cell) => getSeenCells(cell)));
+		for (const cell of editableCells) {
 			cell.fillNumber = null;
+			cell.isClue = false;
 		}
 		recalculateCandidates(affectedCells);
 	}
 
 	function handleKeypadNumber(fillValue: number, inputSource: NumberInputSource = 'keyboard') {
-		const modeAtAction = activeKeypadMode;
-		const hasSelectedCells = selectedCells.length > 0;
+		const modeAtAction = puzzlePhase === 'setup' ? 'Enter digit' : activeKeypadMode;
+		const hasEditableSelectedCells = selectedCells.some(cellCanBeEdited);
 
 		if (modeAtAction === 'Enter digit') {
 			for (const cell of selectedCells) {
@@ -164,9 +176,10 @@
 		}
 
 		const shouldReturnToReveal =
+			puzzlePhase === 'solving' &&
 			returnToRevealAfterEdits &&
 			inputSource === 'pointer' &&
-			hasSelectedCells &&
+			hasEditableSelectedCells &&
 			!shiftHeld &&
 			!controlHeld &&
 			(modeAtAction === 'Enter digit' || modeAtAction === 'Crossout candidate');
@@ -177,6 +190,8 @@
 	}
 
 	function handleModifierKeyDown(event: KeyboardEvent) {
+		if (document.querySelector('dialog[open]') || puzzlePhase === 'setup') return;
+
 		if (event.code === 'Space') {
 			event.preventDefault();
 			if (!event.repeat) {
@@ -198,8 +213,61 @@
 		controlHeld = false;
 	}
 
+	function showStartSolvingConfirmation() {
+		startSolvingDialog.showModal();
+	}
+
+	function startSolving() {
+		for (const cell of gridStateRows.flat()) {
+			cell.isClue = cell.fillNumber !== null;
+		}
+		puzzlePhase = 'solving';
+		openInfoSection = 'guide';
+		keypadMode = 'Enter digit';
+		revealedNumber = null;
+		clearHeldModifiers();
+		startSolvingDialog.close();
+	}
+
+	function showEditPuzzleConfirmation() {
+		editPuzzleDialog.showModal();
+	}
+
+	function clearSelection() {
+		for (const cell of selectedCells) {
+			cell.isSelected = false;
+		}
+		selectedCells = [];
+	}
+
+	function returnToSetup() {
+		const allCells = gridStateRows.flat();
+		for (const cell of allCells) {
+			if (!cell.isClue) {
+				cell.fillNumber = null;
+			}
+			cell.manuallyAddedCandidates.fill(false);
+			cell.crossedOutCandidates.fill(false);
+			cell.boldCandidates.fill(false);
+		}
+		recalculateCandidates(allCells);
+		clearSelection();
+		puzzlePhase = 'setup';
+		openInfoSection = 'guide';
+		showSetupCandidates = false;
+		keypadMode = 'Enter digit';
+		revealedNumber = null;
+		multiSelect = false;
+		clearHeldModifiers();
+		editPuzzleDialog.close();
+	}
+
 	function toggleNoteLayout() {
 		flippedNotes = !flippedNotes;
+	}
+
+	function toggleInfoSection(section: InfoSection) {
+		openInfoSection = openInfoSection === section ? null : section;
 	}
 
 	function toggleReturnToRevealAfterEdits() {
@@ -337,6 +405,7 @@
 <div
 	class="app-container layout-{layoutMode}"
 	class:allow-layout-overflow={allowLayoutOverflow}
+	data-puzzle-phase={puzzlePhase}
 	bind:this={appContainer}
 	style={layoutStyle}
 >
@@ -344,30 +413,182 @@
 		<div class="left-panel">
 			<IsometricBorder color="secondary" fitHeight>
 				<div class="info-content bg-background-lightest">
-					<h1 class="text-primary cascadia-code">Keyboard controls</h1>
-					<ul class="keyboard-controls text-text cascadia-code">
-						<li><kbd>Arrow keys</kbd> move the selection</li>
-						<li><kbd>Shift</kbd> + <kbd>Arrow keys</kbd> extend the selection</li>
-						<li><kbd>1–9</kbd> use the selected keypad tool</li>
-						<li><kbd>Space</kbd> cycles through keypad tools</li>
-						<li>Holding <kbd>Shift</kbd> temporarily switches to Crossout candidate</li>
-						<li>Holding <kbd>Ctrl</kbd> temporarily switches to Enter digit</li>
-						<li>
-							<kbd>Backspace</kbd> or <kbd>Delete</kbd> removes entered digits from selected cells
-						</li>
-						<li><kbd>Escape</kbd> clears the selection</li>
-					</ul>
-					<div class="settings-switches">
-						<TextSwitch
-							label="Flipped notes"
-							onchangeHandler={toggleNoteLayout}
-							binder={flippedNotes}
-						/>
-						<TextSwitch
-							label="Return to Reveal after edits"
-							onchangeHandler={toggleReturnToRevealAfterEdits}
-							binder={returnToRevealAfterEdits}
-						/>
+					<h1 class="puzzle-phase text-primary cascadia-code">
+						Puzzle {puzzlePhase === 'setup' ? 'setup' : puzzlePhase}
+					</h1>
+					<div class="info-accordion cascadia-code">
+						<section class="accordion-item">
+							<h2>
+								<button
+									type="button"
+									class="accordion-trigger"
+									aria-expanded={openInfoSection === 'guide'}
+									aria-controls="info-guide-panel"
+									id="info-guide-trigger"
+									onclick={() => toggleInfoSection('guide')}
+								>
+									<span>Using Sudoku Note</span>
+									<span class="accordion-indicator" aria-hidden="true">
+										{openInfoSection === 'guide' ? '−' : '+'}
+									</span>
+								</button>
+							</h2>
+							{#if openInfoSection === 'guide'}
+								<div
+									class="accordion-panel text-text"
+									id="info-guide-panel"
+									role="region"
+									aria-labelledby="info-guide-trigger"
+								>
+									{#if puzzlePhase === 'setup'}
+										<p>
+											Sudoku Note is a workspace for solving a Sudoku you already have, such as one
+											from a newspaper, book, or another website.
+										</p>
+										<p>
+											Copy the numbers provided by that puzzle into the matching cells on
+											this grid, then press the start solving button.
+											The copied numbers will become fixed clues, and the solving tools will become
+											available.
+										</p>
+									{:else}
+										<p>
+											The numbers copied during Setup are now fixed clues. Select a cell and use the
+											number keypad or candidate tools to work through the puzzle.
+										</p>
+										<p>
+											If a starting clue was copied incorrectly, open Settings and choose Edit
+											puzzle. Returning to Setup will discard the current solving progress.
+										</p>
+									{/if}
+								</div>
+							{/if}
+						</section>
+
+						<section class="accordion-item">
+							<h2>
+								<button
+									type="button"
+									class="accordion-trigger"
+									aria-expanded={openInfoSection === 'rules'}
+									aria-controls="info-rules-panel"
+									id="info-rules-trigger"
+									onclick={() => toggleInfoSection('rules')}
+								>
+									<span>Rules</span>
+									<span class="accordion-indicator" aria-hidden="true">
+										{openInfoSection === 'rules' ? '−' : '+'}
+									</span>
+								</button>
+							</h2>
+							{#if openInfoSection === 'rules'}
+								<div
+									class="accordion-panel text-text"
+									id="info-rules-panel"
+									role="region"
+									aria-labelledby="info-rules-trigger"
+								>
+									<h3 class="text-primary">Standard Sudoku</h3>
+									<p>
+										Fill the grid with digits 1–9 so each appears once in every row, column, and 3×3
+										box.
+									</p>
+								</div>
+							{/if}
+						</section>
+
+						<section class="accordion-item">
+							<h2>
+								<button
+									type="button"
+									class="accordion-trigger"
+									aria-expanded={openInfoSection === 'controls'}
+									aria-controls="info-controls-panel"
+									id="info-controls-trigger"
+									onclick={() => toggleInfoSection('controls')}
+								>
+									<span>Controls</span>
+									<span class="accordion-indicator" aria-hidden="true">
+										{openInfoSection === 'controls' ? '−' : '+'}
+									</span>
+								</button>
+							</h2>
+							{#if openInfoSection === 'controls'}
+								<div
+									class="accordion-panel text-text"
+									id="info-controls-panel"
+									role="region"
+									aria-labelledby="info-controls-trigger"
+								>
+									<h3 class="text-primary">Keyboard controls</h3>
+									<ul class="keyboard-controls">
+										<li><kbd>Arrow keys</kbd> move the selection</li>
+										<li><kbd>Shift</kbd> + <kbd>Arrow keys</kbd> extend the selection</li>
+										{#if puzzlePhase === 'setup'}
+											<li><kbd>1–9</kbd> enters or replaces clues</li>
+										{:else}
+											<li><kbd>1–9</kbd> use the selected keypad tool</li>
+											<li><kbd>Space</kbd> cycles through keypad tools</li>
+											<li>
+												Holding <kbd>Shift</kbd> temporarily switches to Crossout candidate
+											</li>
+											<li>Holding <kbd>Ctrl</kbd> temporarily switches to Enter digit</li>
+										{/if}
+										<li>
+											<kbd>Backspace</kbd> or <kbd>Delete</kbd> removes entered digits from selected
+											cells
+										</li>
+										<li><kbd>Escape</kbd> clears the selection</li>
+									</ul>
+								</div>
+							{/if}
+						</section>
+
+						<section class="accordion-item">
+							<h2>
+								<button
+									type="button"
+									class="accordion-trigger"
+									aria-expanded={openInfoSection === 'settings'}
+									aria-controls="info-settings-panel"
+									id="info-settings-trigger"
+									onclick={() => toggleInfoSection('settings')}
+								>
+									<span>Settings</span>
+									<span class="accordion-indicator" aria-hidden="true">
+										{openInfoSection === 'settings' ? '−' : '+'}
+									</span>
+								</button>
+							</h2>
+							{#if openInfoSection === 'settings'}
+								<div
+									class="accordion-panel text-text"
+									id="info-settings-panel"
+									role="region"
+									aria-labelledby="info-settings-trigger"
+								>
+									<div class="settings-switches">
+										<TextSwitch
+											label="Flipped notes"
+											onchangeHandler={toggleNoteLayout}
+											binder={flippedNotes}
+										/>
+										{#if puzzlePhase !== 'setup'}
+											<TextSwitch
+												label="Return to Reveal after edits"
+												onchangeHandler={toggleReturnToRevealAfterEdits}
+												binder={returnToRevealAfterEdits}
+											/>
+											<button
+												class="edit-puzzle-button cascadia-code"
+												data-preserve-grid-selection
+												onclick={showEditPuzzleConfirmation}>Edit puzzle</button
+											>
+										{/if}
+									</div>
+								</div>
+							{/if}
+						</section>
 					</div>
 				</div>
 			</IsometricBorder>
@@ -383,6 +604,8 @@
 				bind:lastSelected
 				{flippedNotes}
 				{multiSelect}
+				{puzzlePhase}
+				showCandidates={puzzlePhase !== 'setup' || showSetupCandidates}
 				revealedNumber={activeKeypadMode === 'Reveal all candidates' ? revealedNumber : null}
 				{clearCells}
 				handleNumberInput={handleKeypadNumber}
@@ -407,58 +630,83 @@
 							{/each}
 						</div>
 						<div class="tool-keypad">
-							<KeypadButton
-								label="Delete digit"
-								color="secondary"
-								onchangeHandler={() => clearCells(selectedCells)}
-							>
-								<Delete />
-							</KeypadButton>
-							<KeypadButton
-								label="Enter digit"
-								color="text"
-								toggle
-								bind:binder={keypadMode}
-								activeBinder={activeKeypadMode}
-							>
-								<SquareArrowRight />
-							</KeypadButton>
-							<KeypadButton
-								label="Reveal all candidates"
-								color="accent"
-								toggle
-								bind:binder={keypadMode}
-								activeBinder={activeKeypadMode}
-							>
-								<Spotlight />
-							</KeypadButton>
-							<KeypadButton
-								label="Crossout candidate"
-								color="secondary"
-								toggle
-								bind:binder={keypadMode}
-								activeBinder={activeKeypadMode}
-							>
-								<PencilOff />
-							</KeypadButton>
-							<KeypadButton
-								label="Add candidate"
-								color="text"
-								toggle
-								bind:binder={keypadMode}
-								activeBinder={activeKeypadMode}
-							>
-								<Pencil />
-							</KeypadButton>
-							<KeypadButton
-								label="Bold candidate"
-								color="accent"
-								toggle
-								bind:binder={keypadMode}
-								activeBinder={activeKeypadMode}
-							>
-								<Highlighter />
-							</KeypadButton>
+							{#if puzzlePhase === 'setup'}
+								<KeypadButton
+									label="Erase clue"
+									color="secondary"
+									onchangeHandler={() => clearCells(selectedCells)}
+								>
+									<Delete />
+								</KeypadButton>
+								<KeypadButton
+									label="Show candidates"
+									color="accent"
+									checkbox
+									bind:checked={showSetupCandidates}
+								>
+									<Spotlight />
+								</KeypadButton>
+								<KeypadButton
+									label="Start solving"
+									color="text"
+									onchangeHandler={showStartSolvingConfirmation}
+								>
+									<SquareArrowRight />
+								</KeypadButton>
+							{:else}
+								<KeypadButton
+									label="Delete digit"
+									color="secondary"
+									onchangeHandler={() => clearCells(selectedCells)}
+								>
+									<Delete />
+								</KeypadButton>
+								<KeypadButton
+									label="Enter digit"
+									color="text"
+									toggle
+									bind:binder={keypadMode}
+									activeBinder={activeKeypadMode}
+								>
+									<SquareArrowRight />
+								</KeypadButton>
+								<KeypadButton
+									label="Reveal all candidates"
+									color="accent"
+									toggle
+									bind:binder={keypadMode}
+									activeBinder={activeKeypadMode}
+								>
+									<Spotlight />
+								</KeypadButton>
+								<KeypadButton
+									label="Crossout candidate"
+									color="secondary"
+									toggle
+									bind:binder={keypadMode}
+									activeBinder={activeKeypadMode}
+								>
+									<PencilOff />
+								</KeypadButton>
+								<KeypadButton
+									label="Add candidate"
+									color="text"
+									toggle
+									bind:binder={keypadMode}
+									activeBinder={activeKeypadMode}
+								>
+									<Pencil />
+								</KeypadButton>
+								<KeypadButton
+									label="Bold candidate"
+									color="accent"
+									toggle
+									bind:binder={keypadMode}
+									activeBinder={activeKeypadMode}
+								>
+									<Highlighter />
+								</KeypadButton>
+							{/if}
 						</div>
 						<div class="secondary-keypad">
 							<KeypadButton label="Multi-select" color="accent" checkbox bind:checked={multiSelect}>
@@ -475,6 +723,38 @@
 		<RadioButtons labels={panelLabels} bind:binder={displayedPanel} />
 	</div>
 </div>
+
+<dialog
+	class="confirmation-dialog"
+	bind:this={startSolvingDialog}
+	data-preserve-grid-selection
+	aria-labelledby="start-solving-title"
+>
+	<form method="dialog">
+		<h2 id="start-solving-title">Start solving?</h2>
+		<p>The current digits will become fixed clues and the solve timer will begin.</p>
+		<div class="dialog-actions">
+			<button>Cancel</button>
+			<button type="button" onclick={startSolving}>Start solving</button>
+		</div>
+	</form>
+</dialog>
+
+<dialog
+	class="confirmation-dialog"
+	bind:this={editPuzzleDialog}
+	data-preserve-grid-selection
+	aria-labelledby="edit-puzzle-title"
+>
+	<form method="dialog">
+		<h2 id="edit-puzzle-title">Return to Setup?</h2>
+		<p>Your solving progress and current time will be cleared.</p>
+		<div class="dialog-actions">
+			<button>Cancel</button>
+			<button type="button" onclick={returnToSetup}>Return to Setup</button>
+		</div>
+	</form>
+</dialog>
 
 <style lang="scss">
 	.app-container {
@@ -527,12 +807,88 @@
 		overscroll-behavior: contain;
 	}
 
+	.puzzle-phase {
+		margin-bottom: 1rem;
+		text-transform: capitalize;
+	}
+
+	.info-accordion {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.accordion-item h2 {
+		margin: 0;
+	}
+
+	.accordion-trigger {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		width: 100%;
+		min-height: var(--text-control-height);
+		padding: 0.5rem 0.75rem;
+		border: 2px solid var(--color-secondary);
+		color: var(--color-text);
+		background: var(--color-background-lightest);
+		font: inherit;
+		font-weight: 700;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.accordion-trigger:hover,
+	.accordion-trigger:focus-visible,
+	.accordion-trigger[aria-expanded='true'] {
+		color: var(--color-background-lightest);
+		background: var(--color-secondary);
+	}
+
+	.accordion-indicator {
+		font-size: 1.25em;
+		line-height: 1;
+	}
+
+	.accordion-panel {
+		padding: 0.75rem;
+		border: 2px solid var(--color-secondary-light);
+		border-top: 0;
+	}
+
+	.accordion-panel h3 {
+		margin-bottom: 0.5rem;
+	}
+
+	.accordion-panel p + p {
+		margin-top: 0.75rem;
+	}
+
 	.settings-switches {
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
 		gap: 1rem;
 		margin-top: 1rem;
+	}
+
+	.accordion-panel .settings-switches {
+		margin-top: 0;
+	}
+
+	.edit-puzzle-button {
+		min-height: var(--text-control-height);
+		padding: 0.35rem 0.75rem;
+		border: 2px solid var(--color-secondary);
+		color: var(--color-secondary);
+		background: var(--color-background-lightest);
+		cursor: pointer;
+	}
+
+	.edit-puzzle-button:hover,
+	.edit-puzzle-button:focus-visible {
+		color: var(--color-background-lightest);
+		background: var(--color-secondary);
 	}
 
 	.keypad-content {
@@ -664,5 +1020,45 @@
 	.allow-layout-overflow {
 		overflow-y: auto;
 		grid-template-rows: var(--grid-size) auto auto;
+	}
+
+	.confirmation-dialog {
+		max-width: min(28rem, calc(100vw - 2rem));
+		margin: auto;
+		padding: 1.25rem;
+		border: 4px solid var(--color-primary);
+		color: var(--color-text);
+		background: var(--color-background-lightest);
+		font-family: 'Cascadia Code', sans-serif;
+	}
+
+	.confirmation-dialog::backdrop {
+		background: rgb(0 0 0 / 55%);
+	}
+
+	.confirmation-dialog p {
+		margin-top: 0.75rem;
+	}
+
+	.dialog-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.75rem;
+		margin-top: 1.25rem;
+	}
+
+	.dialog-actions button {
+		min-height: 2.75rem;
+		padding: 0.5rem 0.75rem;
+		border: 2px solid var(--color-primary);
+		color: var(--color-text);
+		background: var(--color-background-lightest);
+		font: inherit;
+		cursor: pointer;
+	}
+
+	.dialog-actions button:last-child {
+		color: var(--color-background-lightest);
+		background: var(--color-primary);
 	}
 </style>

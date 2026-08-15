@@ -18,6 +18,14 @@ async function waitForLayout(page: import('@playwright/test').Page) {
 	await expect(page.locator('.app-container')).toHaveClass(/layout-stacked/);
 }
 
+async function beginSolve(page: import('@playwright/test').Page) {
+	await page.getByRole('button', { name: 'Start solving', exact: true }).click();
+	await page
+		.getByRole('dialog', { name: 'Start solving?' })
+		.getByRole('button', { name: 'Start solving', exact: true })
+		.click();
+}
+
 for (const viewport of mobileViewports) {
 	test(`${viewport.name} layout fits ${viewport.width}x${viewport.height}`, async ({ page }) => {
 		await page.setViewportSize({ width: viewport.width, height: viewport.height });
@@ -59,7 +67,9 @@ test('scrolls overflowing Info content within the stacked panel', async ({ page 
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
 	await waitForLayout(page);
+	await beginSolve(page);
 	await page.getByText('Info', { exact: true }).click();
+	await page.getByRole('button', { name: 'Controls', exact: true }).click();
 
 	const infoPanel = page.locator('.left-panel');
 	const infoContent = page.locator('.info-content');
@@ -92,7 +102,9 @@ test('scrolls overflowing Info content within the side panel', async ({ page }) 
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
 	await page.locator('.sudoku-cell').first().waitFor({ state: 'visible' });
 	await expect(page.locator('.app-container')).toHaveClass(/layout-side/);
+	await beginSolve(page);
 	await page.getByText('Info', { exact: true }).click();
+	await page.getByRole('button', { name: 'Controls', exact: true }).click();
 
 	const infoContent = page.locator('.info-content');
 	const panelBounds = await page.locator('.left-panel').boundingBox();

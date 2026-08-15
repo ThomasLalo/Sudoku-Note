@@ -13,6 +13,8 @@
 		lastSelected = $bindable(),
 		flippedNotes,
 		multiSelect,
+		puzzlePhase,
+		showCandidates,
 		revealedNumber,
 		handleNumberInput,
 		clearCells
@@ -23,6 +25,8 @@
 		lastSelected: Cell;
 		flippedNotes: boolean;
 		multiSelect: boolean;
+		puzzlePhase: 'setup' | 'solving' | 'completed';
+		showCandidates: boolean;
 		revealedNumber: number | null;
 		handleNumberInput: (value: number) => void;
 		clearCells: (targetCells: Cell[]) => void;
@@ -218,6 +222,8 @@
 	}
 
 	function handleGlobalKeyDown(event: KeyboardEvent) {
+		if (document.querySelector('dialog[open]')) return;
+
 		if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
 			event.preventDefault();
 
@@ -427,12 +433,19 @@
 						<div class="value-container">
 							<span
 								class="value text-text cascadia-code"
+								class:value-clue={cell.isClue && puzzlePhase !== 'setup'}
+								class:value-entry={!cell.isClue && puzzlePhase !== 'setup'}
+								data-value-kind={cell.isClue ? 'clue' : 'entry'}
 								class:value-revealed={revealedNumber !== null && cell.fillNumber === revealedNumber}
 								class:value-conflict={conflictingCells.has(cell)}>{cell.fillNumber}</span
 							>
 						</div>
 					{:else}
-						<div class="candidate-grid">
+						<div
+							class="candidate-grid"
+							class:candidates-hidden={!showCandidates}
+							aria-hidden={!showCandidates}
+						>
 							{#each candidateInts as num (num)}
 								{@const candidateIndex = keypadInts.indexOf(num)}
 								{@const candidateVisible =
@@ -449,7 +462,7 @@
 										candidateVisible &&
 										!candidateInvalid &&
 										!cell.crossedOutCandidates[candidateIndex]}
-									aria-hidden={!candidateVisible}
+									aria-hidden={!showCandidates || !candidateVisible}
 									data-candidate={num}><span class="candidate-text">{num}</span></span
 								>
 							{/each}
@@ -638,6 +651,15 @@
 		font-size: clamp(1.25rem, 7cqi, 4.5rem);
 	}
 
+	.value-clue {
+		color: var(--color-primary);
+		font-weight: 700;
+	}
+
+	.value-entry {
+		font-weight: 400;
+	}
+
 	.value-revealed {
 		color: var(--color-background-lightest);
 	}
@@ -652,6 +674,10 @@
 		padding-block: 0.5cqi;
 		display: grid;
 		grid-template: 1fr 1fr 1fr / 1fr 1fr 1fr;
+	}
+
+	.candidates-hidden {
+		visibility: hidden;
 	}
 	.candidate {
 		position: relative;
