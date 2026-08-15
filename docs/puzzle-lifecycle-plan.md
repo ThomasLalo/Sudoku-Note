@@ -4,7 +4,7 @@
 
 Sudoku Note is primarily a personal tool for copying an existing Sudoku or variant Sudoku
 into the site and then solving it with the site's candidate and highlighting tools. This plan
-adds a clear puzzle lifecycle, a completion timer, browser-local recovery, and portable puzzle
+adds a clear puzzle lifecycle, a completion timer, browser-local recovery, and shareable puzzle
 definitions without introducing accounts or cloud storage.
 
 This document is the durable handoff between implementation chats. Each chat should implement
@@ -21,7 +21,7 @@ The application has three phases:
 2. **Solving**: Setup digits are fixed clues, solving tools are available, and the timer runs.
 3. **Completed**: The completed time is frozen and a completion overlay is shown.
 
-The site opens in Setup when there is no locally restored session or shared/imported puzzle.
+The site opens in Setup when there is no locally restored session or shared puzzle.
 
 ### Setup behavior
 
@@ -123,7 +123,7 @@ When completion is first detected:
 A full but invalid grid remains in Solving and uses the application's normal conflict feedback.
 It should not repeatedly open an error dialog.
 
-### Persistence and portability
+### Persistence and sharing
 
 Persistence is local to the browser. There are no accounts, server-side records, or cloud sync in
 this plan.
@@ -136,10 +136,20 @@ Puzzle definition and solve session are conceptually separate because they have 
 Only serializable domain data belongs in the stored format. Do not store DOM elements, measured
 widths/heights, hover state, or other transient rendering details.
 
-### Import, export, and share links
+Local restoration and share links are independent features built on the same serialization
+boundary:
 
-Exports and share links contain the puzzle definition only. They must not include solver answers,
-notes, highlights, elapsed time, completion state, theme, or other personal settings.
+- Local restoration preserves the puzzle definition and private solve session so work can resume.
+- A share link contains only the puzzle definition so another browser starts a fresh session.
+
+Share links do not replace local persistence, and local persistence is not a prerequisite for
+encoding or decoding a link. When a shared definition is loaded, the existing local-persistence
+feature can subsequently preserve the new solve session.
+
+### Share links
+
+Share links contain the puzzle definition only. They must not include solver answers, notes,
+highlights, elapsed time, completion state, theme, or other personal settings.
 
 The expected share-link shape is a versioned, encoded definition in the URL fragment:
 
@@ -147,8 +157,14 @@ The expected share-link shape is a versioned, encoded definition in the URL frag
 https://example.com/#p=encoded-puzzle-definition
 ```
 
-Start with a readable and reliable versioned encoding. Add compression only if real puzzle links
-become unwieldy. File export remains the fallback for definitions too large for practical links.
+The URL codec must be versioned separately from the puzzle-definition schema so either can evolve
+without being confused with the other. Start with a readable and reliable encoding for the current
+clue-only definition and enforce a practical payload-size limit. If a payload is too large, fail
+safely with a useful message rather than producing an unreliable link.
+
+Real variant-constraint formats should be measured with deliberately dense representative puzzles
+when they are added. Add compression when those measurements justify it. Puzzle-definition file
+import/export is deferred rather than required as an oversized-link fallback.
 
 ## Explicit non-goals
 
@@ -161,6 +177,7 @@ The following are intentionally outside this plan:
 - Puzzle uniqueness or solvability checking
 - Blocking validation during Setup
 - Implementing variant-constraint editing tools
+- Puzzle-definition file import/export
 - Premature URL compression or a generalized migration framework
 
 These can be reconsidered in response to an actual personal need or user demand.
@@ -271,38 +288,20 @@ Acceptance criteria:
 - Normal interaction remains responsive; storage writes are not performed wastefully on every
   timer-render tick.
 
-### Phase 5: Puzzle-definition import and export
-
-Add portable files for puzzle definitions.
-
-Scope:
-
-- Export the current puzzle definition in the versioned format from Phase 3.
-- Import a supported puzzle-definition file.
-- Validate before replacing current state.
-- Confirm before replacing a meaningful current session.
-- Load imported definitions without solver progress and make them ready to begin solving.
-
-Acceptance criteria:
-
-- Export excludes solver entries, annotations, timer, phase, and personal settings.
-- Export followed by import recreates the same clues and supported definition data.
-- Invalid and unsupported files produce a useful error without altering current state.
-- Canceling replacement preserves the current session.
-- Import works without network access or a backend.
-
-### Phase 6: Shareable puzzle links
+### Phase 5: Shareable puzzle links
 
 Add backend-free sharing of puzzle definitions.
 
 Scope:
 
 - Encode the Phase 3 puzzle definition into a versioned URL fragment.
+- Keep the URL-codec version distinct from the puzzle-definition version.
 - Generate a copyable share URL.
 - Decode and validate a shared definition on page load.
 - Confirm before replacing a meaningful current session.
 - Provide a useful failure state for corrupt, unsupported, or impractically large payloads.
-- Use file export as the documented fallback for oversized definitions.
+- Load a confirmed shared definition as a fresh Setup puzzle and allow Phase 4 persistence to save
+  the resulting local session normally.
 
 Acceptance criteria:
 
@@ -311,6 +310,7 @@ Acceptance criteria:
 - Invalid link data cannot partially mutate the current puzzle or execute arbitrary content.
 - The feature works on static hosting and requires no database.
 - Existing local sessions are not silently overwritten by opening a link.
+- An impractically large payload is rejected with a useful message and leaves current state intact.
 - Compression is not added unless link size demonstrates a practical need.
 
 ## Verification expectations
@@ -343,16 +343,15 @@ Each phase should:
 - [x] Phase 2: Completion and timer
 - [x] Phase 3: Versioned serialization
 - [x] Phase 4: Local current-session restoration
-- [ ] Phase 5: Puzzle-definition import and export
-- [ ] Phase 6: Shareable puzzle links
+- [x] Phase 5: Shareable puzzle links
 
 ## Current handoff
 
-- **Current phase:** Phase 5 is ready to begin. Phase 4 is implemented but remains uncommitted for
-  review.
-- **Last completed phase:** Phase 4: Local current-session restoration.
+- **Current phase:** All planned phases are complete; Phase 5 is implemented and ready for review.
+- **Last completed phase:** Phase 5: Shareable puzzle links.
 - **History note:** Commit `a153548` is the Phase 2 timer/completion implementation even though its
-  subject says "phase 3". Commit `a92079c` is the plan's Phase 3 serialization implementation.
+  subject says "phase 3". Commit `a92079c` is the plan's Phase 3 serialization implementation, and
+  commit `e63059f` is the accepted Phase 4 local-persistence implementation.
 - **Timer policy:** Count active, visible Solving time only. Hidden and closed intervals do not
   count; a restored Solving session should resume from its serialized accumulated elapsed time.
 - **Serialization format:** `src/lib/puzzleSerialization.ts` owns strict version 1 formats. A puzzle
@@ -369,7 +368,8 @@ Each phase should:
   Add a new supported puzzle-definition version after a concrete constraint domain exists rather
   than preserving unknown constraint data. Calculated candidates, DOM references, measurements,
   selection, tool state, layout/display preferences, the active `performance.now()` baseline, and
-  the timer interval ID are excluded. This phase adds no storage, import/export, link, or other UI.
+  the timer interval ID are excluded. This phase adds no storage, file portability, link, or other
+  UI.
 - **Phase 4 storage boundary:** `src/lib/puzzlePersistence.ts` owns the single
   `sudoku-note-current-puzzle` local-storage record. Its strict envelope contains only the Phase 3
   serialized puzzle-definition and solve-session strings. The app saves after serializable puzzle
@@ -388,8 +388,8 @@ Each phase should:
   after edits. Dark Mode now appears with the other Info settings but continues to use the existing
   independent `theme` key as its sole source of persisted state; `src/app.html` applies that value
   before rendering. Setup candidate visibility, selection, active tools, open panels, and responsive
-  layout state remain transient. Preferences never enter puzzle definitions, solve sessions,
-  exports, or future share links.
+  layout state remain transient. Preferences never enter puzzle definitions, solve sessions, or
+  share links.
 - **Phase 4 clear behavior:** Settings now offers a confirmed **New puzzle** action in every phase.
   It resets the in-memory puzzle and removes only the current-puzzle storage key. Theme, the Info
   settings record, and other unrelated preferences remain untouched. A blank Setup is not stored,
@@ -406,32 +406,52 @@ Each phase should:
   `src/routes/+page.svelte`. Direct ESLint on touched existing files remains blocked by the
   pre-existing unused `getAdjacentCell` import in `src/lib/App2.svelte` and unused `grid` variable in
   `tests/sudoku-grid.spec.ts`.
-- **Phase 5 handoff:** Import should validate a puzzle definition fully before offering to replace
-  the current session. After confirmed replacement, clear solver progress, initialize Setup from
-  the imported clues, and let the existing current-session persistence path save it. Export must use
-  the Phase 3 puzzle-definition serializer only; do not expose the Phase 4 storage envelope as a
-  portable file format.
+- **Phase 5 URL codec:** `src/lib/puzzleSharing.ts` owns strict URL-codec version 1. The `#p=` value
+  is UTF-8 JSON encoded as unpadded base64url. Its envelope contains only its own format/version and
+  the serialized Phase 3 puzzle definition; the puzzle-definition version remains inside that
+  serialized definition and can evolve independently. The encoded payload limit is 4,096
+  characters. A fully filled current-schema definition produces a 404-character payload
+  (407-character fragment), so compression is not justified for the clue-only format.
+- **Phase 5 sharing behavior:** Settings offers **Share puzzle**, with a read-only URL and clipboard
+  action plus a manual-copy fallback. Solver entries, annotations, elapsed time, lifecycle phase,
+  and settings never enter the codec. On page load, a valid shared definition is fully decoded and
+  validated before application. It opens as a fresh Setup puzzle; a meaningful restored local
+  session requires confirmation first. Accepting clears/replaces only current-puzzle data and then
+  uses normal Phase 4 persistence. Canceling or acknowledging an invalid, unsupported, ambiguous,
+  or oversized link preserves the current session. Consumed `p` fragments are removed with
+  `history.replaceState` so reloads do not prompt again.
+- **Phase 5 verification:** `npm run check`, `npm run test:e2e` (71 tests), and `npm run build` pass.
+  The focused Phase 5 suite passes 8 tests, and the affected serialization/lifecycle/persistence/
+  responsive-layout run passes 33 tests. Playwright covers definition-only codec round trips,
+  clipboard output, fresh Setup loading and persistence, replacement confirmation/cancellation,
+  atomic corrupt/unsupported/oversized failures, and dialog bounds in wide, side, and stacked phone
+  layouts. The Phase 5 files pass Prettier, and the new codec/test plus serialization files pass
+  ESLint directly. Repository-wide `npm run lint` remains blocked at its Prettier gate by the same
+  five pre-existing files: `package.json`, `playwright.config.ts`, `README.md`,
+  `src/lib/gridUtils.ts`, and `src/routes/+page.svelte`. Direct lint of `src/lib/App2.svelte`
+  remains blocked only by its pre-existing unused `getAdjacentCell` import.
+- **Future format decision:** Keep the readable uncompressed codec until concrete variant
+  constraints exist. When they do, measure deliberately dense representative definitions against
+  the 4,096-character limit before deciding whether a new codec version needs compression. File
+  import/export remains deferred rather than becoming an oversized-link fallback.
 - **Scope guard:** Do not start optional public-facing features, a puzzle library, cloud storage,
   accounts, or concrete variant tools as part of these phases.
 
-## Prompt for a new implementation chat
-
-Replace the phase number as work progresses:
+## Prompt for a review chat
 
 ```text
 Read docs/puzzle-lifecycle-plan.md completely, then inspect the current implementation and git
 status.
 
-Implement Phase 1 only. Do not start or partially implement any later phase.
+Review the uncommitted Phase 5 implementation against the plan's scope and acceptance criteria.
+Do not start or partially implement any deferred feature.
 
-Preserve existing behavior except where Phase 1 explicitly changes it. Add or update tests for
-the phase's acceptance criteria, run the relevant tests, and check the affected responsive
-layouts.
+Verify the focused tests, repository gates, and affected responsive layouts. Preserve the existing
+documentation-only edits in this plan.
 
-Do not commit yet. When finished, update the plan's phase status and current handoff, then
-summarize:
+Do not commit unless explicitly requested. When finished, summarize:
 - what changed
 - what you tested
-- any decisions or discoveries that affect later phases
+- any decisions or discoveries that affect future work
 - anything you could not verify
 ```

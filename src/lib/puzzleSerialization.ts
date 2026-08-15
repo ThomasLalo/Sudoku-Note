@@ -404,3 +404,22 @@ export function deserializePuzzleState(
 
 	return restorePuzzleState(parsedDefinition.value, parsedSession.value);
 }
+
+/** Restores a validated puzzle definition as a new Setup puzzle with no private solve state. */
+export function deserializePuzzleDefinition(
+	puzzleDefinition: string
+): ParseResult<RestoredPuzzleState> {
+	const parsedDefinition = parsePuzzleDefinition(puzzleDefinition);
+	if (!parsedDefinition.ok) return parsedDefinition;
+
+	const emptySession: SolveSessionV1 = {
+		format: solveSessionFormat,
+		version: solveSessionVersion,
+		phase: 'setup',
+		elapsedMilliseconds: 0,
+		entries: Array.from({ length: cellCount }, () => null),
+		annotations: []
+	};
+
+	return restorePuzzleState(parsedDefinition.value, emptySession);
+}

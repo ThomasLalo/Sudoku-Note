@@ -24,7 +24,17 @@
 		decodeStoredPuzzleState,
 		encodeStoredPuzzleState
 	} from './puzzlePersistence';
-	import { serializePuzzleState, type PuzzlePhase } from './puzzleSerialization';
+	import {
+		createPuzzleDefinition,
+		serializePuzzleState,
+		type PuzzlePhase,
+		type RestoredPuzzleState
+	} from './puzzleSerialization';
+	import {
+		createShareUrl,
+		decodeSharedPuzzleFragment,
+		type SharedPuzzleFragmentResult
+	} from './puzzleSharing';
 	import {
 		createUserPreferences,
 		parseUserPreferences,
@@ -64,6 +74,10 @@
 	let editPuzzleDialog: HTMLDialogElement;
 	let newPuzzleDialog: HTMLDialogElement;
 	let completionDialog: HTMLDialogElement;
+	let sharePuzzleDialog: HTMLDialogElement;
+	let replaceSharedPuzzleDialog: HTMLDialogElement;
+	let shareLinkErrorDialog: HTMLDialogElement;
+	let shareUrlInput: HTMLInputElement;
 	let appContainer: HTMLDivElement;
 	let layoutMode: LayoutMode = $state('stacked');
 	let gridSize = $state(300);
@@ -102,6 +116,12 @@
 	let restoreCompletionFocusOnClose = true;
 	let lastSavedPuzzleStorageValue: string | null = null;
 	let lastSavedUserPreferencesValue: string | null = null;
+	let pendingSharedPuzzle: RestoredPuzzleState | null = null;
+	let shareUrl = $state('');
+	let shareCopyMessage = $state('');
+	let shareLinkErrorTitle = $state('');
+	let shareLinkErrorMessage = $state('');
+	let shareLinkErrorIsIncoming = false;
 
 	function reorganizeGrid(boxGrid: Cell[][]) {
 		const rowGrid: Cell[][] = [[], [], [], [], [], [], [], [], []];
@@ -194,7 +214,16 @@
 		}
 	}
 
-	function restoreCurrentPuzzle() {
+	function showRestoredCompletionOverlay() {
+		void tick().then(() => {
+			if (puzzlePhase !== 'completed' || completionDialog.open) return;
+			completionReturnFocus = document.querySelector<HTMLElement>('.sudoku-grid');
+			restoreCompletionFocusOnClose = true;
+			completionDialog.showModal();
+		});
+	}
+
+	function restoreCurrentPuzzle(showCompletionOverlay = true) {
 		let storedValue: string | null;
 		try {
 			storedValue = localStorage.getItem(currentPuzzleStorageKey);
@@ -216,13 +245,8 @@
 
 		if (puzzlePhase === 'solving') {
 			beginActiveTimerSegment();
-		} else if (puzzlePhase === 'completed') {
-			void tick().then(() => {
-				if (puzzlePhase !== 'completed' || completionDialog.open) return;
-				completionReturnFocus = document.querySelector<HTMLElement>('.sudoku-grid');
-				restoreCompletionFocusOnClose = true;
-				completionDialog.showModal();
-			});
+		} else if (puzzlePhase === 'completed' && showCompletionOverlay) {
+			showRestoredCompletionOverlay();
 		}
 	}
 
@@ -621,6 +645,117 @@
 		});
 	}
 
+	function clearShareFragment() {
+		const url = new URL(window.location.href);
+		if (!url.hash) return;
+
+		url.hash = '';
+		history.replaceState(history.state, '', `${url.pathname}${url.search}`);
+	}
+
+	function focusPuzzleAfterIncomingDialog() {
+		void tick().then(() => {
+			if (puzzlePhase === 'completed') {
+				showRestoredCompletionOverlay();
+			} else {
+				document.querySelector<HTMLElement>('.sudoku-grid')?.focus();
+			}
+		});
+	}
+
+	function applySharedPuzzle(sharedPuzzle: RestoredPuzzleState) {
+		clearSelection();
+		resetSolveTimer();
+		gridState = sharedPuzzle.gridState;
+		puzzlePhase = 'setup';
+		displayedPanel = 'Keypad';
+		openInfoSection = 'guide';
+		showSetupCandidates = false;
+		keypadMode = 'Enter digit';
+		revealedNumber = null;
+		multiSelect = false;
+		reopenCompletionAfterEditCancel = false;
+		completionReturnFocus = null;
+		restoreCompletionFocusOnClose = true;
+		clearHeldModifiers();
+		clearStoredPuzzle();
+		persistCurrentPuzzle();
+		pendingSharedPuzzle = null;
+		if (replaceSharedPuzzleDialog.open) replaceSharedPuzzleDialog.close();
+		clearShareFragment();
+		void tick().then(() => {
+			document.querySelector<HTMLButtonElement>('button[aria-label="Start solving"]')?.focus();
+		});
+	}
+
+	function acceptSharedPuzzle() {
+		if (pendingSharedPuzzle === null) return;
+		applySharedPuzzle(pendingSharedPuzzle);
+	}
+
+	function cancelSharedPuzzleReplacement() {
+		pendingSharedPuzzle = null;
+		replaceSharedPuzzleDialog.close();
+		clearShareFragment();
+		focusPuzzleAfterIncomingDialog();
+	}
+
+	function dismissShareLinkError() {
+		shareLinkErrorDialog.close();
+		if (shareLinkErrorIsIncoming) {
+			clearShareFragment();
+			focusPuzzleAfterIncomingDialog();
+		}
+		shareLinkErrorIsIncoming = false;
+	}
+
+	function handleSharedPuzzleOnLoad(shared: SharedPuzzleFragmentResult) {
+		if (shared.kind === 'none') return;
+
+		if (shared.kind === 'error') {
+			shareLinkErrorTitle = 'Could not open share link';
+			shareLinkErrorMessage = shared.error.message;
+			shareLinkErrorIsIncoming = true;
+			void tick().then(() => shareLinkErrorDialog.showModal());
+			return;
+		}
+
+		if (!hasMeaningfulPuzzleState()) {
+			applySharedPuzzle(shared.puzzle);
+			return;
+		}
+
+		pendingSharedPuzzle = shared.puzzle;
+		void tick().then(() => replaceSharedPuzzleDialog.showModal());
+	}
+
+	function showSharePuzzle() {
+		const result = createShareUrl(window.location.href, createPuzzleDefinition(gridState));
+		if (!result.ok) {
+			shareLinkErrorTitle = 'Could not create share link';
+			shareLinkErrorMessage = result.error.message;
+			shareLinkErrorIsIncoming = false;
+			shareLinkErrorDialog.showModal();
+			return;
+		}
+
+		shareUrl = result.value;
+		shareCopyMessage = '';
+		sharePuzzleDialog.showModal();
+	}
+
+	async function copyShareUrl() {
+		try {
+			if (!navigator.clipboard) throw new Error('Clipboard API unavailable');
+			await navigator.clipboard.writeText(shareUrl);
+			shareCopyMessage = 'Share link copied.';
+		} catch {
+			shareCopyMessage = 'Automatic copying failed. Select and copy the link manually.';
+			shareUrlInput.focus();
+			shareUrlInput.select();
+		}
+	}
+
 	function toggleDarkMode() {
 		darkMode = !darkMode;
 		applyTheme();
@@ -763,7 +898,9 @@
 	onMount(() => {
 		restoreTheme();
 		restoreUserPreferences();
-		restoreCurrentPuzzle();
+		const sharedPuzzle = decodeSharedPuzzleFragment(window.location.hash);
+		restoreCurrentPuzzle(sharedPuzzle.kind === 'none');
+		handleSharedPuzzleOnLoad(sharedPuzzle);
 		const resizeObserver = new ResizeObserver(updateResponsiveLayout);
 		resizeObserver.observe(appContainer);
 		document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -987,6 +1124,11 @@
 										<button
 											class="settings-action-button cascadia-code"
 											data-preserve-grid-selection
+											onclick={showSharePuzzle}>Share puzzle</button
+										>
+										<button
+											class="settings-action-button cascadia-code"
+											data-preserve-grid-selection
 											onclick={showNewPuzzleConfirmation}>New puzzle</button
 										>
 									</div>
@@ -1178,6 +1320,70 @@
 			<button type="button" onclick={returnToSetup}>Return to Setup</button>
 		</div>
 	</form>
+</dialog>
+
+<dialog
+	class="confirmation-dialog share-dialog"
+	bind:this={sharePuzzleDialog}
+	data-preserve-grid-selection
+	aria-labelledby="share-puzzle-title"
+	onkeydown={containDialogFocus}
+>
+	<h2 id="share-puzzle-title">Share puzzle</h2>
+	<p>
+		This link contains the fixed clues only, without solving progress, notes, time, or settings.
+	</p>
+	<label class="share-url-label" for="share-url">Share URL</label>
+	<input
+		class="share-url-input"
+		id="share-url"
+		bind:this={shareUrlInput}
+		value={shareUrl}
+		readonly
+		onfocus={(event) => event.currentTarget.select()}
+	/>
+	<p class="share-status" role="status" aria-live="polite">{shareCopyMessage}</p>
+	<div class="dialog-actions">
+		<button type="button" onclick={() => sharePuzzleDialog.close()}>Close</button>
+		<button type="button" onclick={copyShareUrl}>Copy link</button>
+	</div>
+</dialog>
+
+<dialog
+	class="confirmation-dialog"
+	bind:this={replaceSharedPuzzleDialog}
+	data-preserve-grid-selection
+	aria-labelledby="replace-shared-puzzle-title"
+	oncancel={(event) => {
+		event.preventDefault();
+		cancelSharedPuzzleReplacement();
+	}}
+	onkeydown={containDialogFocus}
+>
+	<h2 id="replace-shared-puzzle-title">Open shared puzzle?</h2>
+	<p>This will replace your current puzzle and discard its solving progress in this browser.</p>
+	<div class="dialog-actions">
+		<button type="button" onclick={cancelSharedPuzzleReplacement}>Cancel</button>
+		<button type="button" onclick={acceptSharedPuzzle}>Open shared puzzle</button>
+	</div>
+</dialog>
+
+<dialog
+	class="confirmation-dialog"
+	bind:this={shareLinkErrorDialog}
+	data-preserve-grid-selection
+	aria-labelledby="share-link-error-title"
+	oncancel={(event) => {
+		event.preventDefault();
+		dismissShareLinkError();
+	}}
+	onkeydown={containDialogFocus}
+>
+	<h2 id="share-link-error-title">{shareLinkErrorTitle}</h2>
+	<p>{shareLinkErrorMessage}</p>
+	<div class="dialog-actions">
+		<button type="button" onclick={dismissShareLinkError}>OK</button>
+	</div>
 </dialog>
 
 <dialog
@@ -1489,6 +1695,27 @@
 
 	.confirmation-dialog p {
 		margin-top: 0.75rem;
+	}
+
+	.share-url-label {
+		display: block;
+		margin-top: 1rem;
+		font-weight: 700;
+	}
+
+	.share-url-input {
+		width: 100%;
+		min-height: 2.75rem;
+		margin-top: 0.35rem;
+		padding: 0.5rem;
+		border: 2px solid var(--color-primary);
+		color: var(--color-text);
+		background: var(--color-background-lightest);
+		font: inherit;
+	}
+
+	.share-status {
+		min-height: 1.5em;
 	}
 
 	.dialog-actions {
