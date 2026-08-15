@@ -421,7 +421,6 @@
 />
 
 <!-- Keyboard interaction uses the grid's selection state through the window keydown handler. -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="sudoku-grid"
 	bind:this={gridElement}
@@ -611,7 +610,6 @@
 		{#each gridStateRows as row (row[0].rowNumber0based)}
 			{#each row as cell (cell.boxNumber + '-' + cell.positionInBox)}
 				<!-- Keyboard interaction uses the grid's selection state through the window keydown handler. -->
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
 					class="sudoku-cell"
 					data-box-index={cell.boxNumber - 1}

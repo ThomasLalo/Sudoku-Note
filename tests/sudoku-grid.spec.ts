@@ -86,7 +86,6 @@ test('multi-select toggles cells and keeps each drag add-only or remove-only', a
 	await page.goto('/', { waitUntil: 'domcontentloaded' });
 	await waitForGridHydration(page);
 
-	const grid = page.locator('.sudoku-grid');
 	const cells = page.locator('.sudoku-cell');
 	const multiSelect = page.getByLabel('Multi-select');
 	const secondaryKeypad = page.locator('.secondary-keypad');

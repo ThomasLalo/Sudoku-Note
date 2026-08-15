@@ -13,7 +13,7 @@
 	import Grid2x2Plus from '@lucide/svelte/icons/grid-2x2-plus';
 	import { onMount, tick } from 'svelte';
 	import type { Cell } from './gridUtils';
-	import { initializeGrid, getAdjacentCell } from './gridUtils';
+	import { initializeGrid } from './gridUtils';
 	import {
 		calculateElapsedMilliseconds,
 		formatElapsedTime,

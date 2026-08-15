@@ -20,7 +20,7 @@
     `;
 </script>
 
-{#each labels as label}
+{#each labels as label (label)}
 	<label
 		class="radio-container button-isometric-container"
 		style={styleString + `--box-width: ${label.length * 0.6 + 1.2}rem; `}
