@@ -41,3 +41,14 @@ export function formatElapsedTime(elapsedMilliseconds: number) {
 
 	return parts.map((part) => String(part).padStart(2, '0')).join(':');
 }
+
+export function calculateElapsedMilliseconds(
+	accumulatedActiveMilliseconds: number,
+	activeTimerStartedAt: number | null,
+	now: number
+) {
+	return (
+		accumulatedActiveMilliseconds +
+		(activeTimerStartedAt === null ? 0 : Math.max(0, now - activeTimerStartedAt))
+	);
+}

@@ -14,7 +14,11 @@
 	import { onMount, tick } from 'svelte';
 	import type { Cell } from './gridUtils';
 	import { initializeGrid, getAdjacentCell } from './gridUtils';
-	import { formatElapsedTime, isStandardSudokuComplete } from './puzzleLifecycle';
+	import {
+		calculateElapsedMilliseconds,
+		formatElapsedTime,
+		isStandardSudokuComplete
+	} from './puzzleLifecycle';
 	const keypadInts = [7, 8, 9, 4, 5, 6, 1, 2, 3];
 	const flippedKeypadInts = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 	type LayoutMode = 'wide' | 'side' | 'stacked';
@@ -133,9 +137,11 @@
 	}
 
 	function refreshElapsedTime(now = performance.now()) {
-		elapsedMilliseconds =
-			accumulatedActiveMilliseconds +
-			(activeTimerStartedAt === null ? 0 : Math.max(0, now - activeTimerStartedAt));
+		elapsedMilliseconds = calculateElapsedMilliseconds(
+			accumulatedActiveMilliseconds,
+			activeTimerStartedAt,
+			now
+		);
 	}
 
 	function beginActiveTimerSegment() {

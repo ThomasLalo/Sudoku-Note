@@ -341,38 +341,49 @@ Each phase should:
 - [x] Product discussion and phased plan
 - [x] Phase 1: Lifecycle and clue locking
 - [x] Phase 2: Completion and timer
-- [ ] Phase 3: Versioned serialization
+- [x] Phase 3: Versioned serialization
 - [ ] Phase 4: Local current-session restoration
 - [ ] Phase 5: Puzzle-definition import and export
 - [ ] Phase 6: Shareable puzzle links
 
 ## Current handoff
 
-- **Current phase:** Phase 3 is ready to begin. Phase 2 is implemented but remains uncommitted for
+- **Current phase:** Phase 4 is ready to begin. Phase 3 is implemented but remains uncommitted for
   review.
-- **Last completed phase:** Phase 2: Completion and timer.
+- **Last completed phase:** Phase 3: Versioned serialization.
+- **History note:** Commit `a153548` is the Phase 2 timer/completion implementation even though its
+  subject says "phase 3". The uncommitted serialization work described here is the plan's Phase 3.
 - **Timer policy:** Count active, visible Solving time only. Hidden and closed intervals do not
   count; a restored Solving session should resume from its serialized accumulated elapsed time.
-- **Known architectural context:** `src/lib/App2.svelte` owns the timer's accumulated active time,
-  current visible segment, interval, and completion transition. `src/lib/puzzleLifecycle.ts`
-  contains pure standard-Sudoku completion and elapsed-formatting functions. Completion reads only
-  effective filled values, so candidate annotations cannot affect it. Completed values are locked,
-  and `returnToSetup` clears timer and completion state along with the Phase 1 solver reset.
-- **Phase 3 serialization note:** Serialize accumulated elapsed solve time and lifecycle phase, but
-  exclude runtime timing fields such as the active `performance.now()` baseline and interval ID.
-  The live-timer visibility toggle is a personal display preference rather than puzzle-definition
-  or solve-session data. A serialization snapshot taken during active Solving should first account
-  for the current visible segment rather than relying on the most recent 250 ms display tick.
-- **Phase 2 verification:** `npm run check`, `npm run test:e2e` (50 tests), and `npm run build` pass.
-  Playwright covers active/hidden timing, hour formatting, valid and invalid full grids,
-  candidate-independent completion, one-time overlay behavior, frozen completed time, dialog
-  focus, reset from Completed, and live timer layout checks at wide, side, and stacked/phone sizes.
-  The changed files pass Prettier. Repository-wide `npm run lint` remains blocked at its Prettier
-  gate by the same six pre-existing files recorded after Phase 1: `package.json`,
-  `playwright.config.ts`, `README.md`, `src/app.html`, `src/lib/gridUtils.ts`, and
-  `src/routes/+page.svelte`. The new lifecycle utility and test pass ESLint directly; the touched
-  Svelte components retain three pre-existing ESLint findings (one unused import and two unused
-  Svelte-ignore comments).
+- **Serialization format:** `src/lib/puzzleSerialization.ts` owns strict version 1 formats. A puzzle
+  definition contains its format tag, version, and 81 row-major clues. A solve session contains its
+  own format tag and version, lifecycle phase, elapsed milliseconds, 81 row-major solver entries,
+  and sparse manual-add, crossout, and bold candidate annotations expressed as candidate digits.
+  Clues and entries remain separate, so restoration preserves their identity.
+- **Serialization boundary:** Parsing returns a discriminated success/error result with invalid
+  JSON, invalid data, and unsupported versions distinguished. The combined deserializer validates
+  the complete definition/session pair before constructing a fresh initialized grid, so failure
+  cannot partially mutate the current grid. Setup data with solving progress, clue/entry overlap,
+  and invalid Completed data are rejected. Calculated candidates are rebuilt from effective values.
+- **Extension and exclusion decisions:** Version 1 intentionally has no variant-constraint field.
+  Add a new supported puzzle-definition version after a concrete constraint domain exists rather
+  than preserving unknown constraint data. Calculated candidates, DOM references, measurements,
+  selection, tool state, layout/display preferences, the active `performance.now()` baseline, and
+  the timer interval ID are excluded. This phase adds no storage, import/export, link, or other UI.
+- **Phase 4 timer handoff:** `calculateElapsedMilliseconds` is now the shared timer calculation used
+  by the live display. A serialization snapshot during active Solving must call it with the current
+  monotonic time and serialize that value, not the latest 250 ms display tick. When restoring
+  Solving, use the serialized elapsed value as accumulated active time and begin a new visible
+  segment only if the page is visible.
+- **Phase 3 verification:** `npm run check`, `npm run test:e2e` (54 tests), and `npm run build` pass.
+  The focused serialization/lifecycle run passes 10 tests. Playwright covers definition and session
+  round trips, runtime-field exclusion, clue-versus-entry restoration, annotations, active elapsed
+  time, malformed and unsupported data, atomic failures, and the existing wide, side, stacked, and
+  phone layout matrix. The Phase 3 files pass Prettier and the new pure utility/test files pass
+  ESLint directly. Repository-wide `npm run lint` remains blocked at its Prettier gate by the same
+  six pre-existing files: `package.json`, `playwright.config.ts`, `README.md`, `src/app.html`,
+  `src/lib/gridUtils.ts`, and `src/routes/+page.svelte`. Direct ESLint on the touched
+  `src/lib/App2.svelte` remains blocked by its pre-existing unused `getAdjacentCell` import.
 - **Scope guard:** Do not start optional public-facing features, a puzzle library, cloud storage,
   accounts, or concrete variant tools as part of these phases.
 
