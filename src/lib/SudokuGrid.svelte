@@ -1,10 +1,126 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { Cell } from './gridUtils';
 	import { getAdjacentCell } from './gridUtils';
 	const keypadInts = [7, 8, 9, 4, 5, 6, 1, 2, 3];
 	const flippedInts = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-	const innerGridLines = [1, 2, 3, 4, 5, 6, 7, 8];
-	const cellSpan = `${100 / 9}%`;
+	const cellGridLines = [1, 2, 4, 5, 7, 8];
+	const boxGridLines = [3, 6];
+	const gridTrackCount = 9;
+
+	type AxisGeometry = {
+		innerDevicePixels: number;
+		boundariesDevicePixels: number[];
+		boundariesCssPixels: number[];
+		tracksCss: string;
+	};
+
+	let gridCssWidth = $state(300);
+	let gridCssHeight = $state(300);
+	let gridDeviceWidth = $state(300);
+	let gridDeviceHeight = $state(300);
+
+	const clamp = (value: number, minimum: number, maximum: number) =>
+		Math.min(maximum, Math.max(minimum, value));
+
+	function closestWithParity(value: number, minimum: number, maximum: number, parity: number) {
+		let closest = minimum;
+		let closestDistance = Number.POSITIVE_INFINITY;
+
+		for (let candidate = minimum; candidate <= maximum; candidate += 1) {
+			if (candidate % 2 !== parity) continue;
+			const distance = Math.abs(candidate - value);
+			if (distance < closestDistance) {
+				closest = candidate;
+				closestDistance = distance;
+			}
+		}
+
+		return closestDistance === Number.POSITIVE_INFINITY ? value : closest;
+	}
+
+	function createAxisGeometry(
+		devicePixels: number,
+		cssPixels: number,
+		boxBorderDevicePixels: number
+	): AxisGeometry {
+		const cssPixelsPerDevicePixel = cssPixels / devicePixels;
+		const innerDevicePixels = Math.max(gridTrackCount, devicePixels - boxBorderDevicePixels);
+		const boundariesDevicePixels = Array.from({ length: gridTrackCount + 1 }, (_, index) =>
+			Math.round((index * innerDevicePixels) / gridTrackCount)
+		);
+		const boundariesCssPixels = boundariesDevicePixels.map(
+			(boundary) => boundary * cssPixelsPerDevicePixel
+		);
+		const trackWidthsCss = boundariesDevicePixels.slice(1).map((boundary, index) => {
+			const trackDevicePixels = boundary - boundariesDevicePixels[index];
+			return `${trackDevicePixels * cssPixelsPerDevicePixel}px`;
+		});
+
+		return {
+			innerDevicePixels,
+			boundariesDevicePixels,
+			boundariesCssPixels,
+			tracksCss: trackWidthsCss.join(' ')
+		};
+	}
+
+	let gridGeometry = $derived.by(() => {
+		const cssWidth = Math.max(1, gridCssWidth);
+		const cssHeight = Math.max(1, gridCssHeight);
+		const deviceWidth = Math.max(1, gridDeviceWidth);
+		const deviceHeight = Math.max(1, gridDeviceHeight);
+		const scaleX = deviceWidth / cssWidth;
+		const scaleY = deviceHeight / cssHeight;
+		const deviceScale = Math.min(scaleX, scaleY);
+		const gridCssSize = Math.min(cssWidth, cssHeight);
+
+		const preferredCellBorderCss = clamp(gridCssSize * 0.002, 1, 2);
+		const minimumCellBorderDevice = Math.max(1, Math.ceil(deviceScale));
+		const maximumCellBorderDevice = Math.max(minimumCellBorderDevice, Math.ceil(2 * deviceScale));
+		const cellBorderDevicePixels = clamp(
+			Math.round(preferredCellBorderCss * deviceScale),
+			minimumCellBorderDevice,
+			maximumCellBorderDevice
+		);
+
+		const preferredBoxBorderCss = clamp(gridCssSize * 0.0052, 3, 5);
+		const minimumBoxBorderDevice = Math.max(1, Math.ceil(3 * deviceScale));
+		const maximumBoxBorderDevice = Math.max(minimumBoxBorderDevice, Math.ceil(5 * deviceScale));
+		const boxBorderDevicePixels = closestWithParity(
+			clamp(
+				Math.round(preferredBoxBorderCss * deviceScale),
+				minimumBoxBorderDevice,
+				maximumBoxBorderDevice
+			),
+			minimumBoxBorderDevice,
+			maximumBoxBorderDevice,
+			cellBorderDevicePixels % 2
+		);
+
+		const columns = createAxisGeometry(deviceWidth, cssWidth, boxBorderDevicePixels);
+		const rows = createAxisGeometry(deviceHeight, cssHeight, boxBorderDevicePixels);
+		const cellBorderCss = cellBorderDevicePixels / deviceScale;
+		const boxBorderCss = boxBorderDevicePixels / deviceScale;
+		const style = [
+			`--grid-layer-top: ${boxBorderDevicePixels / 2 / scaleY}px`,
+			`--grid-layer-left: ${boxBorderDevicePixels / 2 / scaleX}px`,
+			`--grid-layer-width: ${columns.innerDevicePixels / scaleX}px`,
+			`--grid-layer-height: ${rows.innerDevicePixels / scaleY}px`,
+			`--grid-columns: ${columns.tracksCss}`,
+			`--grid-rows: ${rows.tracksCss}`,
+			`--cell-border-size: ${cellBorderCss}px`,
+			`--box-border-size: ${boxBorderCss}px`
+		].join('; ');
+
+		return {
+			columns,
+			rows,
+			cellBorderDevicePixels,
+			boxBorderDevicePixels,
+			style
+		};
+	});
 
 	let {
 		gridState = $bindable(),
@@ -96,8 +212,6 @@
 
 		return candidateVisible && !candidateInvalid && !cell.crossedOutCandidates[candidateIndex];
 	};
-
-	const gridPercent = (gridLine: number) => `${(gridLine / 9) * 100}%`;
 
 	function clearSelection() {
 		for (let cellObj of selectedCells) {
@@ -210,6 +324,44 @@
 	}
 
 	let gridElement: HTMLDivElement | undefined; // grid element might be undefined when the page first loads. see the bind:this on sudoku-grid in the html
+
+	function updateGridMeasurements(entry?: ResizeObserverEntry) {
+		if (!gridElement) return;
+
+		const bounds = gridElement.getBoundingClientRect();
+		const devicePixelBox = entry?.devicePixelContentBoxSize?.[0];
+		const devicePixelRatio = window.devicePixelRatio || 1;
+		gridCssWidth = Math.max(1, bounds.width);
+		gridCssHeight = Math.max(1, bounds.height);
+		gridDeviceWidth = Math.max(
+			1,
+			Math.round(devicePixelBox?.inlineSize ?? bounds.width * devicePixelRatio)
+		);
+		gridDeviceHeight = Math.max(
+			1,
+			Math.round(devicePixelBox?.blockSize ?? bounds.height * devicePixelRatio)
+		);
+	}
+
+	onMount(() => {
+		if (!gridElement) return;
+
+		const resizeObserver = new ResizeObserver((entries) => updateGridMeasurements(entries[0]));
+		try {
+			resizeObserver.observe(gridElement, { box: 'device-pixel-content-box' });
+		} catch {
+			resizeObserver.observe(gridElement);
+		}
+		const handleWindowResize = () => updateGridMeasurements();
+		window.addEventListener('resize', handleWindowResize);
+		updateGridMeasurements();
+
+		return () => {
+			resizeObserver.disconnect();
+			window.removeEventListener('resize', handleWindowResize);
+		};
+	});
+
 	function handleGlobalPointerDown(event: PointerEvent) {
 		const target = event.target;
 		if (target instanceof Node && gridElement?.contains(target)) {
@@ -273,6 +425,7 @@
 <div
 	class="sudoku-grid"
 	bind:this={gridElement}
+	style={gridGeometry.style}
 	tabindex="-1"
 	onpointermove={handlePointerMove}
 	onpointerleave={() => (hoveredCell = null)}
@@ -305,10 +458,12 @@
 			{#each row as cell (cell.boxNumber + '-' + cell.positionInBox)}
 				{@const cellRow = cell.rowNumber0based}
 				{@const cellCol = cell.colNumber0based}
-				{@const cellLeft = gridPercent(cellCol)}
-				{@const cellTop = gridPercent(cellRow)}
-				{@const cellRight = gridPercent(cellCol + 1)}
-				{@const cellBottom = gridPercent(cellRow + 1)}
+				{@const cellLeft = `${gridGeometry.columns.boundariesCssPixels[cellCol]}px`}
+				{@const cellTop = `${gridGeometry.rows.boundariesCssPixels[cellRow]}px`}
+				{@const cellRight = `${gridGeometry.columns.boundariesCssPixels[cellCol + 1]}px`}
+				{@const cellBottom = `${gridGeometry.rows.boundariesCssPixels[cellRow + 1]}px`}
+				{@const cellWidth = `${gridGeometry.columns.boundariesCssPixels[cellCol + 1] - gridGeometry.columns.boundariesCssPixels[cellCol]}px`}
+				{@const cellHeight = `${gridGeometry.rows.boundariesCssPixels[cellRow + 1] - gridGeometry.rows.boundariesCssPixels[cellRow]}px`}
 				{#if cell.isSelected}
 					{#if !isCellSelected(cellRow - 1, cellCol)}
 						<rect
@@ -319,7 +474,7 @@
 							data-col={cellCol}
 							x={cellLeft}
 							y={cellTop}
-							width={cellSpan}
+							width={cellWidth}
 						></rect>
 					{/if}
 					{#if !isCellSelected(cellRow, cellCol + 1)}
@@ -331,7 +486,7 @@
 							data-col={cellCol}
 							x={cellRight}
 							y={cellTop}
-							height={cellSpan}
+							height={cellHeight}
 						></rect>
 					{/if}
 					{#if !isCellSelected(cellRow + 1, cellCol)}
@@ -343,7 +498,7 @@
 							data-col={cellCol}
 							x={cellLeft}
 							y={cellBottom}
-							width={cellSpan}
+							width={cellWidth}
 						></rect>
 					{/if}
 					{#if !isCellSelected(cellRow, cellCol - 1)}
@@ -355,7 +510,7 @@
 							data-col={cellCol}
 							x={cellLeft}
 							y={cellTop}
-							height={cellSpan}
+							height={cellHeight}
 						></rect>
 					{/if}
 
@@ -402,17 +557,54 @@
 
 	<svg
 		class="grid-layer grid-line-layer"
-		viewBox="0 0 9 9"
+		viewBox={`0 0 ${gridGeometry.columns.innerDevicePixels} ${gridGeometry.rows.innerDevicePixels}`}
 		preserveAspectRatio="none"
 		aria-hidden="true"
 	>
-		{#each innerGridLines as line (line)}
-			<line class="grid-line" class:box-line={line % 3 === 0} x1={line} y1="0" x2={line} y2="9"
+		{#each cellGridLines as line (line)}
+			<line
+				class="grid-line"
+				x1={gridGeometry.columns.boundariesDevicePixels[line]}
+				y1="0"
+				x2={gridGeometry.columns.boundariesDevicePixels[line]}
+				y2={gridGeometry.rows.innerDevicePixels}
+				stroke-width={gridGeometry.cellBorderDevicePixels}
 			></line>
-			<line class="grid-line" class:box-line={line % 3 === 0} x1="0" y1={line} x2="9" y2={line}
+			<line
+				class="grid-line"
+				x1="0"
+				y1={gridGeometry.rows.boundariesDevicePixels[line]}
+				x2={gridGeometry.columns.innerDevicePixels}
+				y2={gridGeometry.rows.boundariesDevicePixels[line]}
+				stroke-width={gridGeometry.cellBorderDevicePixels}
 			></line>
 		{/each}
-		<rect class="outer-grid-border" x="0" y="0" width="9" height="9"></rect>
+		{#each boxGridLines as line (line)}
+			<line
+				class="grid-line box-line"
+				x1={gridGeometry.columns.boundariesDevicePixels[line]}
+				y1="0"
+				x2={gridGeometry.columns.boundariesDevicePixels[line]}
+				y2={gridGeometry.rows.innerDevicePixels}
+				stroke-width={gridGeometry.boxBorderDevicePixels}
+			></line>
+			<line
+				class="grid-line box-line"
+				x1="0"
+				y1={gridGeometry.rows.boundariesDevicePixels[line]}
+				x2={gridGeometry.columns.innerDevicePixels}
+				y2={gridGeometry.rows.boundariesDevicePixels[line]}
+				stroke-width={gridGeometry.boxBorderDevicePixels}
+			></line>
+		{/each}
+		<rect
+			class="outer-grid-border"
+			x="0"
+			y="0"
+			width={gridGeometry.columns.innerDevicePixels}
+			height={gridGeometry.rows.innerDevicePixels}
+			stroke-width={gridGeometry.boxBorderDevicePixels}
+		></rect>
 	</svg>
 
 	<div class="grid-layer cell-content-layer">
@@ -480,9 +672,7 @@
 		position: relative;
 		isolation: isolate;
 		container-type: inline-size;
-		--cell-border-size: clamp(1px, 0.2cqi, 2px);
 		--half-cell-border-size: calc(var(--cell-border-size) / 2);
-		--box-border-size: clamp(3px, 0.52cqi, 5px);
 		--half-box-border-size: calc(var(--box-border-size) / 2);
 		--selection-visible-size: clamp(2px, 0.42cqi, 4px);
 		--cell-selection-depth: calc(var(--selection-visible-size) + var(--half-cell-border-size));
@@ -495,16 +685,17 @@
 
 	.grid-layer {
 		position: absolute;
-		top: var(--half-box-border-size);
-		left: var(--half-box-border-size);
-		width: calc(100% - var(--box-border-size));
-		height: calc(100% - var(--box-border-size));
+		top: var(--grid-layer-top);
+		left: var(--grid-layer-left);
+		width: var(--grid-layer-width);
+		height: var(--grid-layer-height);
 	}
 
 	.cell-background-layer,
 	.cell-content-layer {
 		display: grid;
-		grid-template: repeat(9, 1fr) / repeat(9, 1fr);
+		grid-template-rows: var(--grid-rows);
+		grid-template-columns: var(--grid-columns);
 	}
 
 	.cell-background-layer {
@@ -611,22 +802,17 @@
 
 	.grid-line {
 		stroke: var(--color-text-grayed);
-		stroke-width: var(--cell-border-size);
-		vector-effect: non-scaling-stroke;
 		shape-rendering: crispEdges;
 	}
 
 	.grid-line.box-line {
 		stroke: var(--color-primary-light);
-		stroke-width: var(--box-border-size);
 	}
 
 	.outer-grid-border {
 		fill: none;
 		stroke: var(--color-primary-light);
-		stroke-width: var(--box-border-size);
 		stroke-linejoin: miter;
-		vector-effect: non-scaling-stroke;
 		shape-rendering: crispEdges;
 	}
 
