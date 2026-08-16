@@ -8,9 +8,11 @@
 	import Highlighter from '@lucide/svelte/icons/highlighter';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import PencilOff from '@lucide/svelte/icons/pencil-off';
+	import Redo from '@lucide/svelte/icons/redo';
 	import Spotlight from '@lucide/svelte/icons/spotlight';
 	import SquareArrowRight from '@lucide/svelte/icons/square-arrow-right';
 	import Grid2x2Plus from '@lucide/svelte/icons/grid-2x2-plus';
+	import Undo from '@lucide/svelte/icons/undo';
 	import { onMount, tick } from 'svelte';
 	import type { Cell } from './gridUtils';
 	import { initializeGrid } from './gridUtils';
@@ -50,6 +52,7 @@
 	const minimumUsefulGridSize = 270;
 	const wideLayoutMinimumWidth = 1616;
 	const shiftedNumpadReleaseGraceMilliseconds = 50;
+	const maximumPuzzleEditHistoryEntries = 100;
 	type KeypadMode =
 		| 'Enter digit'
 		| 'Reveal all candidates'
@@ -57,6 +60,15 @@
 		| 'Add candidate'
 		| 'Bold candidate';
 	type NumberInputSource = 'keyboard' | 'pointer';
+	type PuzzleEditCellSnapshot = Pick<Cell, 'fillNumber' | 'isClue'> & {
+		manuallyAddedCandidates: boolean[];
+		crossedOutCandidates: boolean[];
+		boldCandidates: boolean[];
+	};
+	type PuzzleEditSnapshot = {
+		puzzlePhase: PuzzlePhase;
+		cells: PuzzleEditCellSnapshot[];
+	};
 	const keypadModes: KeypadMode[] = [
 		'Enter digit',
 		'Reveal all candidates',
@@ -103,6 +115,10 @@
 	let returnToRevealAfterEdits = $state(true);
 	let multiSelect = $state(false);
 	let gridState: Cell[][] = $state(initializeGrid());
+	let undoHistory: PuzzleEditSnapshot[] = $state([]);
+	let redoHistory: PuzzleEditSnapshot[] = $state([]);
+	let canUndo = $derived(undoHistory.length > 0);
+	let canRedo = $derived(redoHistory.length > 0);
 	let selectedCells: Cell[] = $state([]);
 	let lastSelected: Cell = $derived(gridState[0][0]);
 	let gridStateRows: Cell[][] = $derived(reorganizeGrid(gridState)); // 0 based
@@ -410,17 +426,124 @@
 		}
 	}
 
+	function capturePuzzleEditSnapshot(): PuzzleEditSnapshot {
+		return {
+			puzzlePhase,
+			cells: gridState.flat().map((cell) => ({
+				fillNumber: cell.fillNumber,
+				isClue: cell.isClue,
+				manuallyAddedCandidates: [...cell.manuallyAddedCandidates],
+				crossedOutCandidates: [...cell.crossedOutCandidates],
+				boldCandidates: [...cell.boldCandidates]
+			}))
+		};
+	}
+
+	function booleanFlagsMatch(left: readonly boolean[], right: readonly boolean[]) {
+		return left.length === right.length && left.every((flag, index) => flag === right[index]);
+	}
+
+	function puzzleEditSnapshotsMatch(left: PuzzleEditSnapshot, right: PuzzleEditSnapshot) {
+		return (
+			left.puzzlePhase === right.puzzlePhase &&
+			left.cells.length === right.cells.length &&
+			left.cells.every((cell, index) => {
+				const otherCell = right.cells[index];
+				return (
+					cell.fillNumber === otherCell.fillNumber &&
+					cell.isClue === otherCell.isClue &&
+					booleanFlagsMatch(cell.manuallyAddedCandidates, otherCell.manuallyAddedCandidates) &&
+					booleanFlagsMatch(cell.crossedOutCandidates, otherCell.crossedOutCandidates) &&
+					booleanFlagsMatch(cell.boldCandidates, otherCell.boldCandidates)
+				);
+			})
+		);
+	}
+
+	function appendBoundedHistory(
+		historyEntries: PuzzleEditSnapshot[],
+		snapshot: PuzzleEditSnapshot
+	) {
+		return [...historyEntries, snapshot].slice(-maximumPuzzleEditHistoryEntries);
+	}
+
+	function resetPuzzleEditHistory() {
+		undoHistory = [];
+		redoHistory = [];
+	}
+
+	function performPuzzleEdit(edit: () => void) {
+		const before = capturePuzzleEditSnapshot();
+		edit();
+		if (puzzleEditSnapshotsMatch(before, capturePuzzleEditSnapshot())) return false;
+
+		undoHistory = appendBoundedHistory(undoHistory, before);
+		redoHistory = [];
+		persistCurrentPuzzle();
+		return true;
+	}
+
+	function applyPuzzleEditSnapshot(snapshot: PuzzleEditSnapshot) {
+		const cells = gridState.flat();
+		if (cells.length !== snapshot.cells.length) return;
+
+		const previousPhase = puzzlePhase;
+		for (const [index, cell] of cells.entries()) {
+			const savedCell = snapshot.cells[index];
+			cell.fillNumber = savedCell.fillNumber;
+			cell.isClue = savedCell.isClue;
+			cell.manuallyAddedCandidates = [...savedCell.manuallyAddedCandidates];
+			cell.crossedOutCandidates = [...savedCell.crossedOutCandidates];
+			cell.boldCandidates = [...savedCell.boldCandidates];
+		}
+		recalculateCandidates(cells);
+		puzzlePhase = snapshot.puzzlePhase;
+
+		if (previousPhase === 'completed' && puzzlePhase === 'solving') {
+			if (completionDialog.open) {
+				restoreCompletionFocusOnClose = false;
+				completionDialog.close();
+			}
+			beginActiveTimerSegment();
+		} else if (previousPhase === 'solving' && puzzlePhase === 'completed') {
+			pauseActiveTimerSegment();
+			clearHeldModifiers();
+			showRestoredCompletionOverlay();
+		}
+
+		persistCurrentPuzzle();
+	}
+
+	function undoPuzzleEdit() {
+		const previousSnapshot = undoHistory.at(-1);
+		if (!previousSnapshot) return;
+
+		redoHistory = appendBoundedHistory(redoHistory, capturePuzzleEditSnapshot());
+		undoHistory = undoHistory.slice(0, -1);
+		applyPuzzleEditSnapshot(previousSnapshot);
+	}
+
+	function redoPuzzleEdit() {
+		const nextSnapshot = redoHistory.at(-1);
+		if (!nextSnapshot) return;
+
+		undoHistory = appendBoundedHistory(undoHistory, capturePuzzleEditSnapshot());
+		redoHistory = redoHistory.slice(0, -1);
+		applyPuzzleEditSnapshot(nextSnapshot);
+	}
+
 	function clearCells(targetCells: Cell[]) {
 		const editableCells = targetCells.filter(cellCanBeEdited);
 		if (editableCells.length === 0) return;
 
-		const affectedCells = new Set(editableCells.flatMap((cell) => getSeenCells(cell)));
-		for (const cell of editableCells) {
-			cell.fillNumber = null;
-			cell.isClue = false;
-		}
-		recalculateCandidates(affectedCells);
-		persistCurrentPuzzle();
+		performPuzzleEdit(() => {
+			const affectedCells = new Set(editableCells.flatMap((cell) => getSeenCells(cell)));
+			for (const cell of editableCells) {
+				cell.fillNumber = null;
+				cell.isClue = false;
+			}
+			recalculateCandidates(affectedCells);
+		});
 	}
 
 	function shiftWasHeldForNumpadInput(event: KeyboardEvent) {
@@ -461,31 +584,36 @@
 						: keypadMode;
 		const hasEditableSelectedCells = selectedCells.some(cellCanBeEdited);
 
-		if (modeAtAction === 'Enter digit') {
-			for (const cell of selectedCells) {
-				fillCell(cell, fillValue);
-			}
-		} else if (modeAtAction === 'Crossout candidate') {
-			const candidateIndex = keypadInts.indexOf(fillValue);
-			for (const cell of selectedCells) {
-				cell.crossedOutCandidates[candidateIndex] = true;
-			}
-		} else if (modeAtAction === 'Bold candidate') {
-			const candidateIndex = keypadInts.indexOf(fillValue);
-			for (const cell of selectedCells) {
-				cell.boldCandidates[candidateIndex] = true;
-			}
-		} else if (modeAtAction === 'Add candidate') {
-			const candidateIndex = keypadInts.indexOf(fillValue);
-			for (const cell of selectedCells) {
-				if (cell.fillNumber !== null) continue;
+		if (modeAtAction !== 'Reveal all candidates') {
+			performPuzzleEdit(() => {
+				if (modeAtAction === 'Enter digit') {
+					for (const cell of selectedCells) {
+						fillCell(cell, fillValue);
+					}
+					completePuzzleIfValid();
+				} else if (modeAtAction === 'Crossout candidate') {
+					const candidateIndex = keypadInts.indexOf(fillValue);
+					for (const cell of selectedCells) {
+						cell.crossedOutCandidates[candidateIndex] = true;
+					}
+				} else if (modeAtAction === 'Bold candidate') {
+					const candidateIndex = keypadInts.indexOf(fillValue);
+					for (const cell of selectedCells) {
+						cell.boldCandidates[candidateIndex] = true;
+					}
+				} else if (modeAtAction === 'Add candidate') {
+					const candidateIndex = keypadInts.indexOf(fillValue);
+					for (const cell of selectedCells) {
+						if (cell.fillNumber !== null) continue;
 
-				cell.crossedOutCandidates[candidateIndex] = false;
-				cell.boldCandidates[candidateIndex] = false;
-				if (!cell.candidates[candidateIndex]) {
-					cell.manuallyAddedCandidates[candidateIndex] = true;
+						cell.crossedOutCandidates[candidateIndex] = false;
+						cell.boldCandidates[candidateIndex] = false;
+						if (!cell.candidates[candidateIndex]) {
+							cell.manuallyAddedCandidates[candidateIndex] = true;
+						}
+					}
 				}
-			}
+			});
 		} else if (modeAtAction === 'Reveal all candidates') {
 			revealedNumber = fillValue;
 		}
@@ -502,11 +630,6 @@
 			revealedNumber = fillValue;
 			keypadMode = 'Reveal all candidates';
 		}
-
-		if (modeAtAction === 'Enter digit') completePuzzleIfValid();
-		if (modeAtAction !== 'Reveal all candidates' && selectedCells.length > 0) {
-			persistCurrentPuzzle();
-		}
 	}
 
 	function handleKeyboardNumber(fillValue: number, event: KeyboardEvent) {
@@ -514,6 +637,7 @@
 	}
 
 	function handleModifierKeyDown(event: KeyboardEvent) {
+		if (handlePuzzleHistoryShortcut(event)) return;
 		if (document.querySelector('dialog[open]') || puzzlePhase === 'setup') return;
 
 		if (event.code === 'Space') {
@@ -529,6 +653,33 @@
 			shiftedNumpadCode = null;
 		}
 		if (event.key === 'Control') controlHeld = true;
+	}
+
+	function isTextEditingTarget(target: EventTarget | null) {
+		if (target instanceof HTMLTextAreaElement) return true;
+		if (target instanceof HTMLInputElement) {
+			return !['button', 'checkbox', 'radio', 'reset', 'submit'].includes(target.type);
+		}
+		return target instanceof HTMLElement && target.isContentEditable;
+	}
+
+	function handlePuzzleHistoryShortcut(event: KeyboardEvent) {
+		if (!(event.ctrlKey || event.metaKey) || event.altKey || isTextEditingTarget(event.target)) {
+			return false;
+		}
+
+		const key = event.key.toLowerCase();
+		if (key !== 'z' && key !== 'y') return false;
+		const openDialog = document.querySelector<HTMLDialogElement>('dialog[open]');
+		if (openDialog && openDialog !== completionDialog) return false;
+
+		event.preventDefault();
+		if (key === 'y' || event.shiftKey) {
+			redoPuzzleEdit();
+		} else {
+			undoPuzzleEdit();
+		}
+		return true;
 	}
 
 	function handleModifierKeyUp(event: KeyboardEvent) {
@@ -574,6 +725,7 @@
 	function startSolving() {
 		if (puzzlePhase !== 'setup') return;
 
+		resetPuzzleEditHistory();
 		for (const cell of gridStateRows.flat()) {
 			cell.isClue = cell.fillNumber !== null;
 		}
@@ -653,6 +805,7 @@
 			cell.boldCandidates.fill(false);
 		}
 		recalculateCandidates(allCells);
+		resetPuzzleEditHistory();
 		clearSelection();
 		puzzlePhase = 'setup';
 		openInfoSection = 'guide';
@@ -677,6 +830,7 @@
 	function beginFreshPuzzle() {
 		clearSelection();
 		resetSolveTimer();
+		resetPuzzleEditHistory();
 		gridState = initializeGrid();
 		puzzlePhase = 'setup';
 		displayedPanel = 'Keypad';
@@ -717,6 +871,7 @@
 	function applySharedPuzzle(sharedPuzzle: RestoredPuzzleState) {
 		clearSelection();
 		resetSolveTimer();
+		resetPuzzleEditHistory();
 		gridState = sharedPuzzle.gridState;
 		puzzlePhase = 'setup';
 		displayedPanel = 'Keypad';
@@ -1115,6 +1270,11 @@
 											<kbd>Backspace</kbd> or <kbd>Delete</kbd> removes entered digits from selected
 											cells
 										</li>
+										<li><kbd>Ctrl/Cmd</kbd> + <kbd>Z</kbd> undoes the last puzzle edit</li>
+										<li>
+											<kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd> or <kbd>Ctrl</kbd> +
+											<kbd>Y</kbd> redoes it
+										</li>
 										<li><kbd>Escape</kbd> clears the selection</li>
 									</ul>
 								</div>
@@ -1308,6 +1468,22 @@
 						<div class="secondary-keypad">
 							<KeypadButton label="Multi-select" color="accent" checkbox bind:checked={multiSelect}>
 								<Grid2x2Plus />
+							</KeypadButton>
+							<KeypadButton
+								label="Undo"
+								color="text"
+								disabled={!canUndo}
+								onchangeHandler={undoPuzzleEdit}
+							>
+								<Undo />
+							</KeypadButton>
+							<KeypadButton
+								label="Redo"
+								color="primary"
+								disabled={!canRedo}
+								onchangeHandler={redoPuzzleEdit}
+							>
+								<Redo />
 							</KeypadButton>
 						</div>
 					</div>
@@ -1701,7 +1877,9 @@
 	}
 
 	.layout-stacked .secondary-keypad {
-		display: block;
+		display: grid;
+		grid-template-rows: repeat(3, var(--key-size));
+		gap: var(--keypad-gap);
 	}
 
 	.layout-wide {

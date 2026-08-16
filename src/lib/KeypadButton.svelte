@@ -7,6 +7,7 @@
 		onchangeHandler = () => {},
 		toggle = false,
 		checkbox = false,
+		disabled = false,
 		binder = $bindable(''),
 		activeBinder,
 		checked = $bindable(false),
@@ -17,6 +18,7 @@
 		onchangeHandler?: (event: MouseEvent) => void;
 		toggle?: boolean;
 		checkbox?: boolean;
+		disabled?: boolean;
 		binder?: string;
 		activeBinder?: string;
 		checked?: boolean;
@@ -33,6 +35,7 @@
 
 	let effectiveBinder = $derived(activeBinder ?? binder);
 	let styleString = $derived(`
+		--face-color: var(--color-${color});
         --bottom-color: var(--color-${color}-dark-static);
         --right-color: var(--color-${color}-light-static);
         --highlight-color: var(--color-${color}-light);
@@ -45,6 +48,7 @@
 {#if checkbox}
 	<label
 		class="button-isometric-container"
+		class:button-disabled={disabled}
 		style={styleString}
 		data-preserve-grid-selection
 		title={label}
@@ -57,7 +61,7 @@
 					{label}
 				{/if}
 			</span>
-			<input type="checkbox" aria-label={label} bind:checked />
+			<input type="checkbox" aria-label={label} {disabled} bind:checked />
 			<div class="button-corner-square"></div>
 			<div class="button-right-parallelogram"></div>
 			<div class="button-bottom-parallelogram"></div>
@@ -66,6 +70,7 @@
 {:else if toggle}
 	<label
 		class="button-isometric-container"
+		class:button-disabled={disabled}
 		style={styleString}
 		data-preserve-grid-selection
 		title={label}
@@ -83,6 +88,7 @@
 				name="keypad-mode"
 				value={label}
 				aria-label={label}
+				{disabled}
 				checked={effectiveBinder === label}
 				onchange={handleModeChange}
 			/>
@@ -99,6 +105,7 @@
 		style={styleString}
 		title={label}
 		aria-label={label}
+		{disabled}
 	>
 		<div class="button-face text-background-lightest bg-{color} cascadia-code">
 			<span class="button-content" aria-hidden={children ? 'true' : undefined}>
@@ -117,6 +124,23 @@
 {/if}
 
 <style lang="scss">
+	.button-isometric-container:disabled,
+	.button-disabled {
+		opacity: 0.45;
+	}
+
+	.button-isometric-container:disabled .button-face,
+	.button-isometric-container:disabled .button-face:hover,
+	.button-isometric-container:disabled .button-face:active,
+	.button-disabled .button-face,
+	.button-disabled .button-face:hover,
+	.button-disabled .button-face:active {
+		background-color: var(--face-color);
+		box-shadow: none;
+		cursor: not-allowed;
+		transform: none;
+	}
+
 	.button-content {
 		position: absolute;
 		inset: 0;

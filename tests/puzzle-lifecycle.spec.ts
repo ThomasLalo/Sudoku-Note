@@ -244,6 +244,15 @@ test('counts active solving time and completes once independently of candidate a
 	await expect(completionDialog).toContainText('01:01:06');
 	const viewPuzzle = completionDialog.getByRole('button', { name: 'View puzzle' });
 	const editFromCompletion = completionDialog.getByRole('button', { name: 'Edit puzzle' });
+	await page.keyboard.press('Control+z');
+	await expect(page.locator('.app-container')).toHaveAttribute('data-puzzle-phase', 'solving');
+	await expect(completionDialog).not.toBeVisible();
+	await expect(finalCell.locator('.value')).toHaveCount(0);
+	await page.keyboard.press('Control+Shift+z');
+	await expect(page.locator('.app-container')).toHaveAttribute('data-puzzle-phase', 'completed');
+	await expect(completionDialog).toBeVisible();
+	await expect(finalCell.locator('.value')).toHaveText('9');
+	await expect(completionDialog).toContainText('01:01:06');
 	await expect(viewPuzzle).toBeFocused();
 	await page.keyboard.press('Tab');
 	await expect(editFromCompletion).toBeFocused();
