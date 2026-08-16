@@ -8,6 +8,7 @@
 	import Highlighter from '@lucide/svelte/icons/highlighter';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import PencilOff from '@lucide/svelte/icons/pencil-off';
+	import Play from '@lucide/svelte/icons/play';
 	import Redo from '@lucide/svelte/icons/redo';
 	import Spotlight from '@lucide/svelte/icons/spotlight';
 	import SquareArrowRight from '@lucide/svelte/icons/square-arrow-right';
@@ -1396,19 +1397,19 @@
 									<Delete />
 								</KeypadButton>
 								<KeypadButton
+									label="Start solving"
+									color="text"
+									onchangeHandler={showStartSolvingConfirmation}
+								>
+									<Play />
+								</KeypadButton>
+								<KeypadButton
 									label="Show candidates"
 									color="accent"
 									checkbox
 									bind:checked={showSetupCandidates}
 								>
 									<Spotlight />
-								</KeypadButton>
-								<KeypadButton
-									label="Start solving"
-									color="text"
-									onchangeHandler={showStartSolvingConfirmation}
-								>
-									<SquareArrowRight />
 								</KeypadButton>
 							{:else}
 								<KeypadButton
