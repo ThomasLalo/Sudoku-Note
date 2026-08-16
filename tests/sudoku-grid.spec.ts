@@ -761,6 +761,101 @@ test('temporarily uses crossout while Shift is held and keeps Shift multi-select
 	}
 });
 
+test('treats a shifted numpad digit as one numeric action while Num Lock is on', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cells = page.locator('.sudoku-cell');
+	await cells.nth(0).click();
+	await page.locator('.keypad label[title="Bold candidate"]').click();
+	await page.keyboard.down('Shift');
+
+	const defaultPrevented = await page.evaluate(() => {
+		window.dispatchEvent(
+			new KeyboardEvent('keyup', {
+				key: 'Shift',
+				code: 'ShiftLeft'
+			})
+		);
+		const event = new KeyboardEvent('keydown', {
+			key: 'ArrowDown',
+			code: 'Numpad2',
+			location: KeyboardEvent.DOM_KEY_LOCATION_NUMPAD,
+			modifierNumLock: true,
+			cancelable: true
+		});
+		window.dispatchEvent(event);
+		return event.defaultPrevented;
+	});
+
+	expect(defaultPrevented).toBe(true);
+	await expect(page.locator('.cell-background.selected')).toHaveCount(1);
+	await expect(page.locator('.cell-background').nth(0)).toHaveClass(/selected/);
+	await expect(cells.nth(0).locator('[data-candidate="2"]')).toHaveClass(/candidate-crossed-out/);
+	await expect(cells.nth(9).locator('[data-candidate="2"]')).not.toHaveClass(
+		/candidate-crossed-out/
+	);
+	await page.waitForTimeout(75);
+	await page.evaluate(() => {
+		window.dispatchEvent(
+			new KeyboardEvent('keydown', {
+				key: 'ArrowDown',
+				code: 'Numpad2',
+				location: KeyboardEvent.DOM_KEY_LOCATION_NUMPAD,
+				modifierNumLock: true,
+				repeat: true,
+				cancelable: true
+			})
+		);
+	});
+	await expect(cells.nth(0).locator('[data-candidate="2"]')).not.toHaveClass(/candidate-bold/);
+	await page.evaluate(() => {
+		window.dispatchEvent(
+			new KeyboardEvent('keyup', {
+				key: 'ArrowDown',
+				code: 'Numpad2',
+				location: KeyboardEvent.DOM_KEY_LOCATION_NUMPAD,
+				modifierNumLock: true
+			})
+		);
+	});
+
+	await page.keyboard.up('Shift');
+});
+
+test('keeps a shifted numpad direction as navigation while Num Lock is off', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 1000 });
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cells = page.locator('.sudoku-cell');
+	await cells.nth(0).click();
+	await page.keyboard.down('Shift');
+	await page.evaluate(() => {
+		window.dispatchEvent(
+			new KeyboardEvent('keydown', {
+				key: 'ArrowDown',
+				code: 'Numpad2',
+				location: KeyboardEvent.DOM_KEY_LOCATION_NUMPAD,
+				shiftKey: true,
+				cancelable: true
+			})
+		);
+	});
+
+	await expect(page.locator('.cell-background.selected')).toHaveCount(2);
+	await expect(page.locator('.cell-background').nth(0)).toHaveClass(/selected/);
+	await expect(page.locator('.cell-background').nth(9)).toHaveClass(/selected/);
+	await expect(cells.nth(0).locator('[data-candidate="2"]')).not.toHaveClass(
+		/candidate-crossed-out/
+	);
+
+	await page.keyboard.up('Shift');
+});
+
 test('temporarily fills digits while Control is held and restores the previous tool', async ({
 	page
 }) => {
@@ -774,7 +869,19 @@ test('temporarily fills digits while Control is held and restores the previous t
 
 	await page.keyboard.down('Control');
 	await expect(page.getByLabel('Enter digit')).toBeChecked();
-	await page.keyboard.press('4');
+	const defaultPrevented = await page.evaluate(() => {
+		const event = new KeyboardEvent('keydown', {
+			key: '4',
+			code: 'Numpad4',
+			location: KeyboardEvent.DOM_KEY_LOCATION_NUMPAD,
+			ctrlKey: true,
+			modifierNumLock: true,
+			cancelable: true
+		});
+		window.dispatchEvent(event);
+		return event.defaultPrevented;
+	});
+	expect(defaultPrevented).toBe(true);
 	await expect(cells.nth(0).locator('.value')).toHaveText('4');
 
 	await page.keyboard.up('Control');

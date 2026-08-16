@@ -144,7 +144,7 @@
 		puzzlePhase: 'setup' | 'solving' | 'completed';
 		showCandidates: boolean;
 		revealedNumber: number | null;
-		handleNumberInput: (value: number) => void;
+		handleNumberInput: (value: number, event: KeyboardEvent) => void;
 		clearCells: (targetCells: Cell[]) => void;
 	} = $props();
 
@@ -373,8 +373,28 @@
 		clearSelection();
 	}
 
+	function getKeyboardNumberInput(event: KeyboardEvent) {
+		const topRowMatch = /^Digit([1-9])$/.exec(event.code);
+		if (topRowMatch) return topRowMatch[1];
+
+		const numpadMatch = /^Numpad([1-9])$/.exec(event.code);
+		if (numpadMatch) {
+			const numLockActive = /^[1-9]$/.test(event.key) || event.getModifierState('NumLock');
+			return numLockActive ? numpadMatch[1] : null;
+		}
+
+		return /^[1-9]$/.test(event.key) ? event.key : null;
+	}
+
 	function handleGlobalKeyDown(event: KeyboardEvent) {
 		if (document.querySelector('dialog[open]')) return;
+
+		const numberInput = getKeyboardNumberInput(event);
+		if (numberInput !== null) {
+			event.preventDefault();
+			handleNumberInput(Number(numberInput), event);
+			return;
+		}
 
 		if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
 			event.preventDefault();
@@ -394,17 +414,13 @@
 				// selectCell(lastSelected.boxNumber -1,lastSelected.positionInBox -1);
 				addToSelection(lastSelected.boxNumber - 1, lastSelected.positionInBox - 1);
 			}
-		}
-
-		const numberKeyMatch = /^(?:Digit|Numpad)([1-9])$/.exec(event.code);
-		const numberInput = numberKeyMatch?.[1] ?? (/^[1-9]$/.test(event.key) ? event.key : null);
-		if (numberInput !== null) {
-			handleNumberInput(Number(numberInput));
+			return;
 		}
 
 		if (['Backspace', 'Delete'].includes(event.key)) {
 			event.preventDefault();
 			clearCells(selectedCells);
+			return;
 		}
 
 		if (event.key === 'Escape') {

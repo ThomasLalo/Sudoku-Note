@@ -49,6 +49,7 @@
 	const preferredKeySize = 64;
 	const minimumUsefulGridSize = 270;
 	const wideLayoutMinimumWidth = 1616;
+	const shiftedNumpadReleaseGraceMilliseconds = 50;
 	type KeypadMode =
 		| 'Enter digit'
 		| 'Reveal all candidates'
@@ -90,6 +91,8 @@
 	let keypadMode: KeypadMode = $state('Enter digit');
 	let shiftHeld = $state(false);
 	let controlHeld = $state(false);
+	let lastShiftReleaseAt = Number.NEGATIVE_INFINITY;
+	let shiftedNumpadCode: string | null = null;
 	let activeKeypadMode = $derived.by<KeypadMode>(() => {
 		if (controlHeld) return 'Enter digit';
 		if (shiftHeld) return 'Crossout candidate';
@@ -420,8 +423,42 @@
 		persistCurrentPuzzle();
 	}
 
-	function handleKeypadNumber(fillValue: number, inputSource: NumberInputSource = 'keyboard') {
-		const modeAtAction = puzzlePhase === 'setup' ? 'Enter digit' : activeKeypadMode;
+	function shiftWasHeldForNumpadInput(event: KeyboardEvent) {
+		if (event.shiftKey || shiftHeld) return true;
+		if (shiftedNumpadCode === event.code) return true;
+
+		const isShiftTranslatedNumpadDigit =
+			/^Numpad[1-9]$/.test(event.code) &&
+			!/^[1-9]$/.test(event.key) &&
+			event.getModifierState('NumLock');
+		const millisecondsSinceShiftRelease = event.timeStamp - lastShiftReleaseAt;
+		if (
+			!isShiftTranslatedNumpadDigit ||
+			millisecondsSinceShiftRelease < 0 ||
+			millisecondsSinceShiftRelease > shiftedNumpadReleaseGraceMilliseconds
+		) {
+			return false;
+		}
+
+		shiftedNumpadCode = event.code;
+		return true;
+	}
+
+	function handleKeypadNumber(
+		fillValue: number,
+		inputSource: NumberInputSource = 'keyboard',
+		keyboardEvent?: KeyboardEvent
+	) {
+		const controlActive = keyboardEvent ? keyboardEvent.ctrlKey || controlHeld : controlHeld;
+		const shiftActive = keyboardEvent ? shiftWasHeldForNumpadInput(keyboardEvent) : shiftHeld;
+		const modeAtAction =
+			puzzlePhase === 'setup'
+				? 'Enter digit'
+				: controlActive
+					? 'Enter digit'
+					: shiftActive
+						? 'Crossout candidate'
+						: keypadMode;
 		const hasEditableSelectedCells = selectedCells.some(cellCanBeEdited);
 
 		if (modeAtAction === 'Enter digit') {
@@ -472,6 +509,10 @@
 		}
 	}
 
+	function handleKeyboardNumber(fillValue: number, event: KeyboardEvent) {
+		handleKeypadNumber(fillValue, 'keyboard', event);
+	}
+
 	function handleModifierKeyDown(event: KeyboardEvent) {
 		if (document.querySelector('dialog[open]') || puzzlePhase === 'setup') return;
 
@@ -482,18 +523,28 @@
 				keypadMode = keypadModes[nextModeIndex];
 			}
 		}
-		if (event.key === 'Shift') shiftHeld = true;
+		if (event.key === 'Shift') {
+			shiftHeld = true;
+			lastShiftReleaseAt = Number.NEGATIVE_INFINITY;
+			shiftedNumpadCode = null;
+		}
 		if (event.key === 'Control') controlHeld = true;
 	}
 
 	function handleModifierKeyUp(event: KeyboardEvent) {
-		if (event.key === 'Shift') shiftHeld = false;
+		if (event.key === 'Shift') {
+			lastShiftReleaseAt = event.timeStamp;
+			shiftHeld = false;
+		}
+		if (event.code === shiftedNumpadCode) shiftedNumpadCode = null;
 		if (event.key === 'Control') controlHeld = false;
 	}
 
 	function clearHeldModifiers() {
 		shiftHeld = false;
 		controlHeld = false;
+		lastShiftReleaseAt = Number.NEGATIVE_INFINITY;
+		shiftedNumpadCode = null;
 	}
 
 	function containDialogFocus(event: KeyboardEvent) {
@@ -1154,7 +1205,7 @@
 				showCandidates={puzzlePhase !== 'setup' || showSetupCandidates}
 				revealedNumber={activeKeypadMode === 'Reveal all candidates' ? revealedNumber : null}
 				{clearCells}
-				handleNumberInput={handleKeypadNumber}
+				handleNumberInput={handleKeyboardNumber}
 			/>
 		</IsometricBorder>
 	</div>
