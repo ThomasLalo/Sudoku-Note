@@ -1466,12 +1466,9 @@
 							{/if}
 						</div>
 						<div class="secondary-keypad">
-							<KeypadButton label="Multi-select" color="accent" checkbox bind:checked={multiSelect}>
-								<Grid2x2Plus />
-							</KeypadButton>
 							<KeypadButton
 								label="Undo"
-								color="text"
+								color="secondary"
 								disabled={!canUndo}
 								onchangeHandler={undoPuzzleEdit}
 							>
@@ -1479,11 +1476,14 @@
 							</KeypadButton>
 							<KeypadButton
 								label="Redo"
-								color="primary"
+								color="text"
 								disabled={!canRedo}
 								onchangeHandler={redoPuzzleEdit}
 							>
 								<Redo />
+							</KeypadButton>
+							<KeypadButton label="Multi-select" color="accent" checkbox bind:checked={multiSelect}>
+								<Grid2x2Plus />
 							</KeypadButton>
 						</div>
 					</div>
