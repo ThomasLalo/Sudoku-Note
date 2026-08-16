@@ -386,6 +386,25 @@
 		return /^[1-9]$/.test(event.key) ? event.key : null;
 	}
 
+	function getKeyboardDirection(key: string) {
+		switch (key.toLowerCase()) {
+			case 'arrowup':
+			case 'w':
+				return 'ArrowUp';
+			case 'arrowdown':
+			case 's':
+				return 'ArrowDown';
+			case 'arrowleft':
+			case 'a':
+				return 'ArrowLeft';
+			case 'arrowright':
+			case 'd':
+				return 'ArrowRight';
+			default:
+				return null;
+		}
+	}
+
 	function handleGlobalKeyDown(event: KeyboardEvent) {
 		if (document.querySelector('dialog[open]')) return;
 
@@ -396,12 +415,13 @@
 			return;
 		}
 
-		if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+		const keyboardDirection = getKeyboardDirection(event.key);
+		if (keyboardDirection !== null) {
 			event.preventDefault();
 
 			if (selectedCells.length !== 0) {
 				// ! is not .at() syntax. it is a non-null assertion, I'm telling typescript this cell will always exist. it will because of the if block
-				const [newBox, newCellPos] = getAdjacentCell(selectedCells.at(-1)!, event.key);
+				const [newBox, newCellPos] = getAdjacentCell(selectedCells.at(-1)!, keyboardDirection);
 
 				if (!event.shiftKey) {
 					//only select multiple cells if shift is held down

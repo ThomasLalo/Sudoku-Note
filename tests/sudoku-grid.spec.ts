@@ -24,6 +24,46 @@ test('renders and selects cells in the layered Sudoku grid', async ({ page }) =>
 	await expect.poll(() => grid.locator('.selection-segment').count()).toBeGreaterThan(0);
 });
 
+test('navigates the grid with WASD like the arrow keys', async ({ page }) => {
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cells = page.locator('.sudoku-cell');
+	const backgrounds = page.locator('.cell-background');
+	await cells.nth(40).click();
+
+	for (const [key, selectedCell] of [
+		['w', 31],
+		['a', 30],
+		['s', 39],
+		['d', 40]
+	] as const) {
+		await page.keyboard.press(key);
+		await expect(backgrounds.nth(selectedCell)).toHaveClass(/selected/);
+		await expect(page.locator('.cell-background.selected')).toHaveCount(1);
+	}
+});
+
+test('wraps keyboard navigation across grid edges', async ({ page }) => {
+	await page.goto('/', { waitUntil: 'domcontentloaded' });
+	await waitForGridHydration(page);
+
+	const cells = page.locator('.sudoku-cell');
+	const backgrounds = page.locator('.cell-background');
+	await cells.nth(0).click();
+
+	for (const [key, selectedCell] of [
+		['w', 72],
+		['ArrowDown', 0],
+		['a', 8],
+		['ArrowRight', 0]
+	] as const) {
+		await page.keyboard.press(key);
+		await expect(backgrounds.nth(selectedCell)).toHaveClass(/selected/);
+		await expect(page.locator('.cell-background.selected')).toHaveCount(1);
+	}
+});
+
 test('selects multiple cells with a touch pointer drag', async ({ page }) => {
 	await page.setViewportSize({ width: 1400, height: 1000 });
 	await page.goto('/', { waitUntil: 'domcontentloaded' });

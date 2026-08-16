@@ -30,7 +30,7 @@ export function getAdjacentCell(originCell: Cell, direction: string) {
 
 	if (direction === 'ArrowUp') {
 		if (row1based === 1) {
-			return [gridBoxIndex, gridcellIndex];
+			return [gridBoxIndex + 6, gridcellIndex + 6];
 		} else if (row1based === 4 || row1based == 7) {
 			return [gridBoxIndex - 3, gridcellIndex + 6]; // go from box 4 cell 3 to box 1 cell 9, or row 4 to row 3
 		} else {
@@ -40,7 +40,7 @@ export function getAdjacentCell(originCell: Cell, direction: string) {
 
 	if (direction === 'ArrowDown') {
 		if (row1based === 9) {
-			return [gridBoxIndex, gridcellIndex];
+			return [gridBoxIndex - 6, gridcellIndex - 6];
 		} else if (row1based === 6 || row1based === 3) {
 			return [gridBoxIndex + 3, gridcellIndex - 6]; // go from box 5 cell 7 to box 8 cell 1, or row 6 to row 7
 		} else {
@@ -50,7 +50,7 @@ export function getAdjacentCell(originCell: Cell, direction: string) {
 
 	if (direction === 'ArrowLeft') {
 		if (col1based === 1) {
-			return [gridBoxIndex, gridcellIndex];
+			return [gridBoxIndex + 2, gridcellIndex + 2];
 		} else if (col1based === 4 || col1based == 7) {
 			return [gridBoxIndex - 1, gridcellIndex + 2]; // go from box 5 cell 4 to box 4 cell 6, or col 4 to col 3
 		} else {
@@ -60,7 +60,7 @@ export function getAdjacentCell(originCell: Cell, direction: string) {
 
 	if (direction === 'ArrowRight') {
 		if (col1based === 9) {
-			return [gridBoxIndex, gridcellIndex];
+			return [gridBoxIndex - 2, gridcellIndex - 2];
 		} else if (col1based === 6 || col1based == 3) {
 			return [gridBoxIndex + 1, gridcellIndex - 2]; // go from box 4 cell 3 to box 5 cell 1, or col 3 to col 4
 		} else {
