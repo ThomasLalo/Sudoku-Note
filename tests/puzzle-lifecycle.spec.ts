@@ -51,7 +51,7 @@ test('opens in Setup with editable clues and optional calculated candidates', as
 	const peerFive = cells.nth(1).locator('[data-candidate="5"]');
 
 	await expect(app).toHaveAttribute('data-puzzle-phase', 'setup');
-	await expect(page.getByRole('button', { name: 'Erase clue or line' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Erase clue or constraint' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Start solving', exact: true })).toBeVisible();
 	await expect(showCandidates).not.toBeChecked();
 	await expect(peerFive).toBeHidden();
@@ -108,7 +108,7 @@ test('opens in Setup with editable clues and optional calculated candidates', as
 	await page.keyboard.press('4');
 	await expect(cells.nth(0).locator('.value')).toHaveText('4');
 	await expect(cells.nth(10).locator('.value')).toHaveText('4');
-	await page.getByRole('button', { name: 'Erase clue or line' }).click();
+	await page.getByRole('button', { name: 'Erase clue or constraint' }).click();
 	await expect(cells.nth(0).locator('.value')).toHaveCount(0);
 	await expect(cells.nth(10).locator('.value')).toHaveCount(0);
 
@@ -386,7 +386,7 @@ test('keeps lifecycle controls usable in wide, side, and stacked layouts', async
 		await openPuzzle(page);
 		const app = page.locator('.app-container');
 		await expect(app).toHaveClass(new RegExp(layout.className));
-		await expect(page.getByRole('button', { name: 'Erase clue or line' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Erase clue or constraint' })).toBeVisible();
 		await expect(page.locator('label[title="Show candidates"]')).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Start solving', exact: true })).toBeVisible();
 

@@ -8,6 +8,13 @@
 		getGermanWhisperConflictIndexes,
 		type GermanWhisperLine
 	} from './germanWhispers';
+	import {
+		areOrthogonallyAdjacentCellIndexes,
+		getKillerCageCellIndexes,
+		getKillerCageConflictIndexes,
+		maximumKillerCageSize,
+		type KillerCage
+	} from './killerCages';
 	const keypadInts = [7, 8, 9, 4, 5, 6, 1, 2, 3];
 	const flippedInts = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 	const cellGridLines = [1, 2, 4, 5, 7, 8];
@@ -132,7 +139,10 @@
 		gridState = $bindable(),
 		gridStateRows = $bindable(),
 		germanWhisperLines,
+		killerCages,
+		pendingKillerCageCells,
 		drawGermanWhispers,
+		drawKillerCages,
 		selectedCells = $bindable(),
 		lastSelected = $bindable(),
 		flippedNotes,
@@ -142,12 +152,16 @@
 		revealedNumber,
 		handleNumberInput,
 		clearCells,
-		commitGermanWhisperLine
+		commitGermanWhisperLine,
+		requestKillerCage
 	}: {
 		gridState: Cell[][];
 		gridStateRows: Cell[][];
 		germanWhisperLines: GermanWhisperLine[];
+		killerCages: KillerCage[];
+		pendingKillerCageCells: number[];
 		drawGermanWhispers: boolean;
+		drawKillerCages: boolean;
 		selectedCells: Cell[];
 		lastSelected: Cell;
 		flippedNotes: boolean;
@@ -158,6 +172,7 @@
 		handleNumberInput: (value: number, event: KeyboardEvent) => void;
 		clearCells: (targetCells: Cell[]) => void;
 		commitGermanWhisperLine: (line: GermanWhisperLine) => void;
+		requestKillerCage: (cellIndexes: number[]) => void;
 	} = $props();
 
 	let candidateInts = $derived(flippedNotes ? flippedInts : keypadInts);
@@ -193,6 +208,13 @@
 		for (const cellIndex of germanWhisperConflicts) {
 			conflicts.add(rowMajorCells[cellIndex]);
 		}
+		const killerCageConflicts = getKillerCageConflictIndexes(
+			rowMajorCells.map((cell) => cell.fillNumber),
+			killerCages
+		);
+		for (const cellIndex of killerCageConflicts) {
+			conflicts.add(rowMajorCells[cellIndex]);
+		}
 
 		for (const cell of gridStateRows.flat()) {
 			for (const [candidateIndex, manuallyAdded] of cell.manuallyAddedCandidates.entries()) {
@@ -219,6 +241,12 @@
 	let lastGestureCell: Cell | null = null;
 	let drawingWhisperGesture = false;
 	let draftGermanWhisperLine: GermanWhisperLine = $state([]);
+	let drawingKillerCageGesture = false;
+	let draftKillerCageCells: number[] = $state([]);
+	let visibleDraftKillerCageCells = $derived(
+		draftKillerCageCells.length > 0 ? draftKillerCageCells : pendingKillerCageCells
+	);
+	let occupiedKillerCageCells = $derived(getKillerCageCellIndexes(killerCages));
 	let hoveredCell: Cell | null = $state(null);
 
 	const isCellSelected = (row: number, col: number) =>
@@ -266,6 +294,24 @@
 		activePointerId = event.pointerId;
 		lastPointerPosition = { x: event.clientX, y: event.clientY };
 		const cellObj = gridState[boxNumber][cellNumber];
+		if (drawKillerCages && puzzlePhase === 'setup') {
+			clearSelection();
+			const cellIndex = getCellIndex(cellObj);
+			if (occupiedKillerCageCells.has(cellIndex)) {
+				activePointerId = null;
+				lastPointerPosition = null;
+				return;
+			}
+			drawingKillerCageGesture = true;
+			draftKillerCageCells = [cellIndex];
+			lastGestureCell = cellObj;
+			try {
+				gridElement?.setPointerCapture(event.pointerId);
+			} catch {
+				// Synthetic pointer events and interrupted gestures may not be capturable.
+			}
+			return;
+		}
 		if (drawGermanWhispers && puzzlePhase === 'setup') {
 			clearSelection();
 			drawingWhisperGesture = true;
@@ -361,6 +407,28 @@
 		lastGestureCell = cell;
 	}
 
+	function applyKillerCageDragToCell(cell: Cell | null) {
+		if (!cell) return;
+
+		const cellIndex = getCellIndex(cell);
+		if (draftKillerCageCells.includes(cellIndex)) {
+			lastGestureCell = cell;
+			return;
+		}
+		if (
+			draftKillerCageCells.length >= maximumKillerCageSize ||
+			occupiedKillerCageCells.has(cellIndex) ||
+			!draftKillerCageCells.some((draftCellIndex) =>
+				areOrthogonallyAdjacentCellIndexes(draftCellIndex, cellIndex)
+			)
+		) {
+			return;
+		}
+
+		draftKillerCageCells = [...draftKillerCageCells, cellIndex];
+		lastGestureCell = cell;
+	}
+
 	function handlePointerMove(event: PointerEvent) {
 		const currentCell = getCellAtPoint(event.clientX, event.clientY);
 		if (event.pointerType === 'mouse') hoveredCell = currentCell;
@@ -378,11 +446,14 @@
 			const progress = step / steps;
 			const sampledX = lastPointerPosition.x + xDistance * progress;
 			const sampledY = lastPointerPosition.y + yDistance * progress;
-			const sampledCell = drawingWhisperGesture
-				? getWhisperCellAtPoint(sampledX, sampledY)
-				: getCellAtPoint(sampledX, sampledY);
+			const sampledCell =
+				drawingWhisperGesture || drawingKillerCageGesture
+					? getWhisperCellAtPoint(sampledX, sampledY)
+					: getCellAtPoint(sampledX, sampledY);
 			if (drawingWhisperGesture) {
 				applyWhisperDragToCell(sampledCell);
+			} else if (drawingKillerCageGesture) {
+				applyKillerCageDragToCell(sampledCell);
 			} else {
 				applyDragToCell(sampledCell);
 			}
@@ -395,11 +466,20 @@
 		if (drawingWhisperGesture && event.type === 'pointerup' && draftGermanWhisperLine.length >= 2) {
 			commitGermanWhisperLine([...draftGermanWhisperLine]);
 		}
+		if (
+			drawingKillerCageGesture &&
+			event.type === 'pointerup' &&
+			draftKillerCageCells.length >= 1
+		) {
+			requestKillerCage([...draftKillerCageCells]);
+		}
 
 		dragAdding = false;
 		dragRemoving = false;
 		drawingWhisperGesture = false;
 		draftGermanWhisperLine = [];
+		drawingKillerCageGesture = false;
+		draftKillerCageCells = [];
 		activePointerId = null;
 		lastPointerPosition = null;
 		lastGestureCell = null;
@@ -414,6 +494,72 @@
 		return line
 			.map((cellIndex) => `${(cellIndex % 9) + 0.5},${Math.floor(cellIndex / 9) + 0.5}`)
 			.join(' ');
+	}
+
+	function killerCagePath(cellIndexes: readonly number[]) {
+		const inset = 0.1;
+		const cells = new Set(cellIndexes);
+		const hasCell = (row: number, column: number) =>
+			row >= 0 && row < 9 && column >= 0 && column < 9 && cells.has(row * 9 + column);
+		const segments: string[] = [];
+
+		for (const cellIndex of cellIndexes) {
+			const row = Math.floor(cellIndex / 9);
+			const column = cellIndex % 9;
+			const above = hasCell(row - 1, column);
+			const right = hasCell(row, column + 1);
+			const below = hasCell(row + 1, column);
+			const left = hasCell(row, column - 1);
+
+			if (!above) {
+				segments.push(
+					`M ${column + (left ? 0 : inset)} ${row + inset} H ${column + 1 - (right ? 0 : inset)}`
+				);
+			}
+			if (!right) {
+				segments.push(
+					`M ${column + 1 - inset} ${row + (above ? 0 : inset)} V ${row + 1 - (below ? 0 : inset)}`
+				);
+			}
+			if (!below) {
+				segments.push(
+					`M ${column + 1 - (right ? 0 : inset)} ${row + 1 - inset} H ${column + (left ? 0 : inset)}`
+				);
+			}
+			if (!left) {
+				segments.push(
+					`M ${column + inset} ${row + 1 - (below ? 0 : inset)} V ${row + (above ? 0 : inset)}`
+				);
+			}
+		}
+
+		return segments.join(' ');
+	}
+
+	function killerCageSumAtCell(cellIndex: number) {
+		return killerCages.find((cage) => Math.min(...cage.cells) === cellIndex)?.sum ?? null;
+	}
+
+	function killerCageEdgesAtCell(cellIndex: number) {
+		const cage = killerCages.find((candidateCage) => candidateCage.cells.includes(cellIndex));
+		if (!cage) return { top: false, right: false, bottom: false, left: false };
+
+		const cageCells = new Set(cage.cells);
+		const row = Math.floor(cellIndex / 9);
+		const column = cellIndex % 9;
+		const hasCell = (candidateRow: number, candidateColumn: number) =>
+			candidateRow >= 0 &&
+			candidateRow < 9 &&
+			candidateColumn >= 0 &&
+			candidateColumn < 9 &&
+			cageCells.has(candidateRow * 9 + candidateColumn);
+
+		return {
+			top: !hasCell(row - 1, column),
+			right: !hasCell(row, column + 1),
+			bottom: !hasCell(row + 1, column),
+			left: !hasCell(row, column - 1)
+		};
 	}
 
 	let gridElement: HTMLDivElement | undefined; // grid element might be undefined when the page first loads. see the bind:this on sudoku-grid in the html
@@ -553,6 +699,7 @@
 <div
 	class="sudoku-grid"
 	class:drawing-german-whispers={drawGermanWhispers && puzzlePhase === 'setup'}
+	class:drawing-killer-cages={drawKillerCages && puzzlePhase === 'setup'}
 	bind:this={gridElement}
 	style={gridGeometry.style}
 	tabindex="-1"
@@ -580,6 +727,13 @@
 		preserveAspectRatio="none"
 		aria-hidden="true"
 	>
+		{#each killerCages as cage, cageIndex (`${cageIndex}-${cage.sum}-${cage.cells.join('-')}`)}
+			<path class="killer-cage" d={killerCagePath(cage.cells)}></path>
+		{/each}
+		{#if visibleDraftKillerCageCells.length >= 1}
+			<path class="killer-cage killer-cage-draft" d={killerCagePath(visibleDraftKillerCageCells)}
+			></path>
+		{/if}
 		{#each germanWhisperLines as line, lineIndex (`${lineIndex}-${line.join('-')}`)}
 			<polyline class="german-whisper-line" points={germanWhisperPoints(line)}></polyline>
 		{/each}
@@ -748,6 +902,8 @@
 	<div class="grid-layer cell-content-layer">
 		{#each gridStateRows as row (row[0].rowNumber0based)}
 			{#each row as cell (cell.boxNumber + '-' + cell.positionInBox)}
+				{@const killerCageSum = killerCageSumAtCell(getCellIndex(cell))}
+				{@const killerCageEdges = killerCageEdgesAtCell(getCellIndex(cell))}
 				<!-- Keyboard interaction uses the grid's selection state through the window keydown handler. -->
 				<div
 					class="sudoku-cell"
@@ -759,6 +915,11 @@
 					bind:clientWidth={cell.width}
 					bind:clientHeight={cell.height}
 				>
+					{#if killerCageSum !== null}
+						<span class="killer-cage-sum cascadia-code" data-killer-cage-sum={killerCageSum}
+							>{killerCageSum}</span
+						>
+					{/if}
 					{#if cell.fillNumber !== null}
 						<div class="value-container">
 							<span
@@ -773,6 +934,10 @@
 					{:else}
 						<div
 							class="candidate-grid"
+							class:cage-edge-top={killerCageEdges.top}
+							class:cage-edge-right={killerCageEdges.right}
+							class:cage-edge-bottom={killerCageEdges.bottom}
+							class:cage-edge-left={killerCageEdges.left}
 							class:candidates-hidden={!showCandidates}
 							aria-hidden={!showCandidates}
 						>
@@ -882,6 +1047,21 @@
 		opacity: 0.65;
 	}
 
+	.killer-cage {
+		fill: none;
+		stroke: var(--color-text-grayed);
+		stroke-width: 0.045;
+		stroke-dasharray: 0.11 0.075;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+
+	.killer-cage-draft {
+		stroke: var(--color-secondary);
+		stroke-width: 0.065;
+		opacity: 0.8;
+	}
+
 	.selection-layer {
 		z-index: 20;
 	}
@@ -970,6 +1150,7 @@
 	}
 
 	.sudoku-cell {
+		position: relative;
 		min-width: 0;
 		min-height: 0;
 		background-color: transparent;
@@ -978,6 +1159,26 @@
 
 	.drawing-german-whispers .sudoku-cell {
 		cursor: crosshair;
+	}
+
+	.drawing-killer-cages .sudoku-cell {
+		cursor: crosshair;
+	}
+
+	.killer-cage-sum {
+		position: absolute;
+		z-index: 1;
+		top: 5%;
+		left: 6%;
+		max-width: 42%;
+		padding-inline: 0.12em;
+		color: var(--color-text);
+		background: var(--color-background-lightest);
+		font-size: clamp(0.45rem, 1.65cqi, 0.9rem);
+		font-weight: 700;
+		line-height: 0.9;
+		letter-spacing: -0.04em;
+		pointer-events: none;
 	}
 
 	.value-container {
@@ -1014,6 +1215,23 @@
 		padding-block: 0.5cqi;
 		display: grid;
 		grid-template: 1fr 1fr 1fr / 1fr 1fr 1fr;
+	}
+
+	// Keep notes inside the dotted perimeter while leaving shared cage edges unconstrained.
+	.candidate-grid.cage-edge-top {
+		padding-top: 1.5cqi;
+	}
+
+	.candidate-grid.cage-edge-right {
+		padding-right: 1.5cqi;
+	}
+
+	.candidate-grid.cage-edge-bottom {
+		padding-bottom: 1.5cqi;
+	}
+
+	.candidate-grid.cage-edge-left {
+		padding-left: 1.5cqi;
 	}
 
 	.candidates-hidden {

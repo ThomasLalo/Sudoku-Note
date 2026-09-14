@@ -118,7 +118,7 @@ test('round-trips only the versioned puzzle definition through a separately vers
 	expect(sharedDefinition).toMatchObject({
 		version: puzzleDefinitionVersion,
 		clues: expect.any(Array),
-		constraints: { germanWhispers: [] }
+		constraints: { germanWhispers: [], killerCages: [] }
 	});
 
 	const decoded = decodeSharedPuzzleFragment(url.hash);
@@ -128,6 +128,7 @@ test('round-trips only the versioned puzzle definition through a separately vers
 	const restoredCells = rowMajorCells(decoded.puzzle.gridState);
 	expect(decoded.puzzle).toMatchObject({ puzzlePhase: 'setup', elapsedMilliseconds: 0 });
 	expect(decoded.puzzle.germanWhisperLines).toEqual([]);
+	expect(decoded.puzzle.killerCages).toEqual([]);
 	expect(restoredCells[0]).toMatchObject({ fillNumber: 5, isClue: true });
 	expect(restoredCells[1]).toMatchObject({ fillNumber: null, isClue: false });
 	expect(restoredCells[2].manuallyAddedCandidates).not.toContain(true);

@@ -24,7 +24,7 @@ async function drawLine(page: Page, cellIndexes: number[], browserMoveSteps = 5)
 	await page.mouse.up();
 }
 
-test('draws and restores diagonal German Whispers with candidate and conflict rules', async ({
+test('draws and restores diagonal German Whispers without narrowing candidates', async ({
 	page
 }) => {
 	await openPuzzle(page);
@@ -41,9 +41,9 @@ test('draws and restores diagonal German Whispers with candidate and conflict ru
 	await expect(whisperLine).toHaveAttribute('points', '0.5,0.5 1.5,1.5 2.5,2.5');
 
 	await page.locator('label[title="Show candidates"]').click();
-	await expect(cells.nth(0).locator('[data-candidate="5"]')).toBeHidden();
-	await expect(cells.nth(10).locator('[data-candidate="5"]')).toBeHidden();
-	await expect(cells.nth(20).locator('[data-candidate="5"]')).toBeHidden();
+	await expect(cells.nth(0).locator('[data-candidate="5"]')).toBeVisible();
+	await expect(cells.nth(10).locator('[data-candidate="5"]')).toBeVisible();
+	await expect(cells.nth(20).locator('[data-candidate="5"]')).toBeVisible();
 	await expect(cells.nth(2).locator('[data-candidate="5"]')).toBeVisible();
 
 	await page.getByRole('button', { name: 'Undo' }).click();
@@ -51,7 +51,7 @@ test('draws and restores diagonal German Whispers with candidate and conflict ru
 	await expect(cells.nth(0).locator('[data-candidate="5"]')).toBeVisible();
 	await page.getByRole('button', { name: 'Redo' }).click();
 	await expect(whisperLine).toHaveCount(1);
-	await expect(cells.nth(0).locator('[data-candidate="5"]')).toBeHidden();
+	await expect(cells.nth(0).locator('[data-candidate="5"]')).toBeVisible();
 
 	await drawTool.click();
 	await cells.nth(0).click();
@@ -63,7 +63,8 @@ test('draws and restores diagonal German Whispers with candidate and conflict ru
 	await page.reload({ waitUntil: 'domcontentloaded' });
 	await cells.first().waitFor({ state: 'visible' });
 	await expect(whisperLine).toHaveCount(1);
-	await expect(cells.nth(0).locator('[data-candidate="5"]')).toBeHidden();
+	await page.locator('label[title="Show candidates"]').click();
+	await expect(cells.nth(20).locator('[data-candidate="5"]')).toBeVisible();
 
 	await page.getByText('Info', { exact: true }).click();
 	await page.getByRole('button', { name: 'Rules', exact: true }).click();
@@ -86,7 +87,7 @@ test('erase cuts a one-cell gap while preserving both sides of a whisper line', 
 	await page.locator('label[title="Show candidates"]').click();
 	await cells.nth(2).click();
 	await page.keyboard.press('6');
-	await page.getByRole('button', { name: 'Erase clue or line' }).click();
+	await page.getByRole('button', { name: 'Erase clue or constraint' }).click();
 
 	await expect(cells.nth(2).locator('.value')).toHaveCount(0);
 	await expect(whisperLines).toHaveCount(2);
@@ -94,11 +95,10 @@ test('erase cuts a one-cell gap while preserving both sides of a whisper line', 
 		await whisperLines.evaluateAll((lines) => lines.map((line) => line.getAttribute('points')))
 	).toEqual(['0.5,0.5 1.5,0.5', '3.5,0.5 4.5,0.5']);
 	await expect(cells.nth(2).locator('[data-candidate="5"]')).toBeVisible();
-	await expect(cells.nth(1).locator('[data-candidate="5"]')).toBeHidden();
-	await expect(cells.nth(3).locator('[data-candidate="5"]')).toBeHidden();
+	await expect(cells.nth(1).locator('[data-candidate="5"]')).toBeVisible();
+	await expect(cells.nth(3).locator('[data-candidate="5"]')).toBeVisible();
 
 	await page.getByRole('button', { name: 'Undo' }).click();
 	await expect(whisperLines).toHaveCount(1);
 	await expect(cells.nth(2).locator('.value')).toHaveText('6');
-	await expect(cells.nth(2).locator('[data-candidate="5"]')).toBeHidden();
 });

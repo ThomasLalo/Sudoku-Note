@@ -5,6 +5,7 @@ import {
 	createPuzzleDefinition,
 	createSolveSession,
 	deserializePuzzleState,
+	germanWhispersPuzzleDefinitionVersion,
 	parsePuzzleDefinition,
 	parseSolveSession,
 	puzzleDefinitionFormat,
@@ -62,7 +63,7 @@ test('round-trips a versioned puzzle definition without solver or runtime state'
 		format: puzzleDefinitionFormat,
 		version: puzzleDefinitionVersion,
 		clues: Array.from({ length: 81 }, (_, index) => (index === 0 ? 5 : index === 10 ? 7 : null)),
-		constraints: { germanWhispers: germanWhisperLines }
+		constraints: { germanWhispers: germanWhisperLines, killerCages: [] }
 	});
 	for (const runtimeField of [
 		'fillNumber',
@@ -146,7 +147,7 @@ test('round-trips entries, candidate annotations, phase, and current active time
 	}
 });
 
-test('round-trips German Whispers and excludes 5 from calculated line candidates', () => {
+test('round-trips German Whispers without narrowing calculated candidates', () => {
 	const gridState = initializeGrid();
 	const germanWhisperLines = [
 		[0, 10, 11],
@@ -162,16 +163,72 @@ test('round-trips German Whispers and excludes 5 from calculated line candidates
 	const restoredCells = rowMajorCells(restored.value.gridState);
 	const fiveIndex = candidateDigits.indexOf(5);
 	for (const cellIndex of [0, 10, 11, 72, 64]) {
-		expect(restoredCells[cellIndex].candidates[fiveIndex]).toBe(false);
+		expect(restoredCells[cellIndex].candidates[fiveIndex]).toBe(true);
 	}
 	expect(restoredCells[1].candidates[fiveIndex]).toBe(true);
 
 	const definition = JSON.parse(serialized.puzzleDefinition) as Record<string, unknown>;
 	expect(
 		parsePuzzleDefinition(
-			JSON.stringify({ ...definition, constraints: { germanWhispers: [[0, 2]] } })
+			JSON.stringify({
+				...definition,
+				constraints: { germanWhispers: [[0, 2]], killerCages: [] }
+			})
 		)
 	).toMatchObject({ ok: false, error: { code: 'invalid-data' } });
+});
+
+test('restores version 2 German Whispers definitions with no killer cages', () => {
+	const currentDefinition = createPuzzleDefinition(initializeGrid(), [[0, 1]]);
+	const previousDefinition = {
+		...currentDefinition,
+		version: germanWhispersPuzzleDefinitionVersion,
+		constraints: { germanWhispers: currentDefinition.constraints.germanWhispers }
+	};
+	const session = createSolveSession(initializeGrid(), 'setup', 0);
+	const restored = deserializePuzzleState(
+		JSON.stringify(previousDefinition),
+		serializeSolveSession(session)
+	);
+
+	expect(restored.ok).toBe(true);
+	if (!restored.ok) return;
+	expect(restored.value.germanWhisperLines).toEqual([[0, 1]]);
+	expect(restored.value.killerCages).toEqual([]);
+});
+
+test('round-trips valid Killer Sudoku cages and rejects disconnected or overlapping cages', () => {
+	const gridState = initializeGrid();
+	const killerCages = [
+		{ sum: 6, cells: [0, 1, 10] },
+		{ sum: 15, cells: [3, 4] }
+	];
+	const serialized = serializePuzzleState(gridState, 'setup', 0, [], killerCages);
+	const restored = deserializePuzzleState(serialized.puzzleDefinition, serialized.solveSession);
+
+	expect(restored.ok).toBe(true);
+	if (!restored.ok) return;
+	expect(restored.value.killerCages).toEqual(killerCages);
+
+	const definition = JSON.parse(serialized.puzzleDefinition) as Record<string, unknown>;
+	const constraints = (definition.constraints ?? {}) as Record<string, unknown>;
+	for (const invalidCages of [
+		[{ sum: 4, cells: [0, 10] }],
+		[
+			{ sum: 3, cells: [0, 1] },
+			{ sum: 5, cells: [1, 2] }
+		],
+		[{ sum: 2, cells: [0, 1] }]
+	]) {
+		expect(
+			parsePuzzleDefinition(
+				JSON.stringify({
+					...definition,
+					constraints: { ...constraints, killerCages: invalidCages }
+				})
+			)
+		).toMatchObject({ ok: false, error: { code: 'invalid-data' } });
+	}
 });
 
 test('restores Completed data while preserving clue-versus-entry identity', () => {

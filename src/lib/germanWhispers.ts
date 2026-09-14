@@ -35,10 +35,6 @@ export function isGermanWhisperLine(value: unknown): value is GermanWhisperLine 
 	);
 }
 
-export function getGermanWhisperCellIndexes(lines: readonly GermanWhisperLine[]) {
-	return new Set(lines.flat());
-}
-
 /** Removes selected cells from lines, preserving each remaining run that still has an edge. */
 export function cutGermanWhisperLinesAtCells(
 	lines: readonly GermanWhisperLine[],

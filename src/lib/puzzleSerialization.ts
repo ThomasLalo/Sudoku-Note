@@ -2,11 +2,15 @@ import type { Cell } from './gridUtils';
 import { initializeGrid } from './gridUtils';
 import {
 	areGermanWhispersComplete,
-	getCellIndex,
-	getGermanWhisperCellIndexes,
 	isGermanWhisperLine,
 	type GermanWhisperLine
 } from './germanWhispers';
+import {
+	areKillerCagesComplete,
+	isKillerCage,
+	killerCagesAreDisjoint,
+	type KillerCage
+} from './killerCages';
 import { isStandardSudokuComplete } from './puzzleLifecycle';
 
 const sudokuSize = 9;
@@ -16,7 +20,8 @@ const candidateDigits = [7, 8, 9, 4, 5, 6, 1, 2, 3] as const;
 export const puzzleDefinitionFormat = 'sudoku-note-puzzle-definition';
 export const solveSessionFormat = 'sudoku-note-solve-session';
 export const legacyPuzzleDefinitionVersion = 1;
-export const puzzleDefinitionVersion = 2;
+export const germanWhispersPuzzleDefinitionVersion = 2;
+export const puzzleDefinitionVersion = 3;
 export const solveSessionVersion = 1;
 
 export type PuzzlePhase = 'setup' | 'solving' | 'completed';
@@ -30,14 +35,24 @@ export interface PuzzleDefinitionV1 {
 
 export interface PuzzleDefinitionV2 {
 	format: typeof puzzleDefinitionFormat;
-	version: typeof puzzleDefinitionVersion;
+	version: typeof germanWhispersPuzzleDefinitionVersion;
 	clues: CellValue[];
 	constraints: {
 		germanWhispers: GermanWhisperLine[];
 	};
 }
 
-export type PuzzleDefinition = PuzzleDefinitionV1 | PuzzleDefinitionV2;
+export interface PuzzleDefinitionV3 {
+	format: typeof puzzleDefinitionFormat;
+	version: typeof puzzleDefinitionVersion;
+	clues: CellValue[];
+	constraints: {
+		germanWhispers: GermanWhisperLine[];
+		killerCages: KillerCage[];
+	};
+}
+
+export type PuzzleDefinition = PuzzleDefinitionV1 | PuzzleDefinitionV2 | PuzzleDefinitionV3;
 
 export interface CandidateAnnotationsV1 {
 	cell: number;
@@ -63,6 +78,7 @@ export interface SerializedPuzzleState {
 export interface RestoredPuzzleState {
 	gridState: Cell[][];
 	germanWhisperLines: GermanWhisperLine[];
+	killerCages: KillerCage[];
 	puzzlePhase: PuzzlePhase;
 	elapsedMilliseconds: number;
 }
@@ -152,6 +168,7 @@ export function parsePuzzleDefinition(input: string): ParseResult<PuzzleDefiniti
 	if (
 		Number.isInteger(value.version) &&
 		value.version !== legacyPuzzleDefinitionVersion &&
+		value.version !== germanWhispersPuzzleDefinitionVersion &&
 		value.version !== puzzleDefinitionVersion
 	) {
 		return failure(
@@ -166,19 +183,36 @@ export function parsePuzzleDefinition(input: string): ParseResult<PuzzleDefiniti
 		return success(value as unknown as PuzzleDefinitionV1);
 	}
 
+	if (value.version === germanWhispersPuzzleDefinitionVersion) {
+		if (
+			!hasExactKeys(value, ['format', 'version', 'clues', 'constraints']) ||
+			!isCellValues(value.clues) ||
+			!isRecord(value.constraints) ||
+			!hasExactKeys(value.constraints, ['germanWhispers']) ||
+			!Array.isArray(value.constraints.germanWhispers) ||
+			!value.constraints.germanWhispers.every(isGermanWhisperLine)
+		) {
+			return failure('invalid-data', 'Puzzle definition contains invalid data.');
+		}
+		return success(value as unknown as PuzzleDefinitionV2);
+	}
+
 	if (
 		value.version !== puzzleDefinitionVersion ||
 		!hasExactKeys(value, ['format', 'version', 'clues', 'constraints']) ||
 		!isCellValues(value.clues) ||
 		!isRecord(value.constraints) ||
-		!hasExactKeys(value.constraints, ['germanWhispers']) ||
+		!hasExactKeys(value.constraints, ['germanWhispers', 'killerCages']) ||
 		!Array.isArray(value.constraints.germanWhispers) ||
-		!value.constraints.germanWhispers.every(isGermanWhisperLine)
+		!value.constraints.germanWhispers.every(isGermanWhisperLine) ||
+		!Array.isArray(value.constraints.killerCages) ||
+		!value.constraints.killerCages.every(isKillerCage) ||
+		!killerCagesAreDisjoint(value.constraints.killerCages)
 	) {
 		return failure('invalid-data', 'Puzzle definition contains invalid data.');
 	}
 
-	return success(value as unknown as PuzzleDefinitionV2);
+	return success(value as unknown as PuzzleDefinitionV3);
 }
 
 export function parseSolveSession(input: string): ParseResult<SolveSessionV1> {
@@ -260,18 +294,23 @@ function enabledCandidateDigits(flags: readonly boolean[]) {
 
 export function createPuzzleDefinition(
 	gridState: readonly (readonly Cell[])[],
-	germanWhisperLines: readonly GermanWhisperLine[] = []
-): PuzzleDefinitionV2 {
+	germanWhisperLines: readonly GermanWhisperLine[] = [],
+	killerCages: readonly KillerCage[] = []
+): PuzzleDefinitionV3 {
 	const cells = getRowMajorCells(gridState);
 	if (!germanWhisperLines.every(isGermanWhisperLine)) {
 		throw new Error('Cannot serialize invalid German Whispers lines.');
+	}
+	if (!killerCages.every(isKillerCage) || !killerCagesAreDisjoint(killerCages)) {
+		throw new Error('Cannot serialize invalid Killer Sudoku cages.');
 	}
 	return {
 		format: puzzleDefinitionFormat,
 		version: puzzleDefinitionVersion,
 		clues: cells.map((cell) => (cell.isClue ? cell.fillNumber : null)),
 		constraints: {
-			germanWhispers: germanWhisperLines.map((line) => [...line])
+			germanWhispers: germanWhisperLines.map((line) => [...line]),
+			killerCages: killerCages.map((cage) => ({ sum: cage.sum, cells: [...cage.cells] }))
 		}
 	};
 }
@@ -338,11 +377,12 @@ export function serializePuzzleState(
 	gridState: readonly (readonly Cell[])[],
 	phase: PuzzlePhase,
 	elapsedMilliseconds: number,
-	germanWhisperLines: readonly GermanWhisperLine[] = []
+	germanWhisperLines: readonly GermanWhisperLine[] = [],
+	killerCages: readonly KillerCage[] = []
 ): SerializedPuzzleState {
 	return {
 		puzzleDefinition: serializePuzzleDefinition(
-			createPuzzleDefinition(gridState, germanWhisperLines)
+			createPuzzleDefinition(gridState, germanWhisperLines, killerCages)
 		),
 		solveSession: serializeSolveSession(createSolveSession(gridState, phase, elapsedMilliseconds))
 	};
@@ -375,10 +415,15 @@ function validateCombinedState(
 			effectiveValues.slice(row * sudokuSize, (row + 1) * sudokuSize)
 		);
 		const germanWhisperLines =
-			definition.version === puzzleDefinitionVersion ? definition.constraints.germanWhispers : [];
+			definition.version === legacyPuzzleDefinitionVersion
+				? []
+				: definition.constraints.germanWhispers;
+		const killerCages =
+			definition.version === puzzleDefinitionVersion ? definition.constraints.killerCages : [];
 		if (
 			!isStandardSudokuComplete(rows) ||
-			!areGermanWhispersComplete(effectiveValues, germanWhisperLines)
+			!areGermanWhispersComplete(effectiveValues, germanWhisperLines) ||
+			!areKillerCagesComplete(effectiveValues, killerCages)
 		) {
 			return failure('invalid-data', 'Completed data does not contain a completed Sudoku.');
 		}
@@ -394,11 +439,7 @@ function setCandidateFlags(flags: boolean[], digits: readonly number[]) {
 	}
 }
 
-function recalculateCandidates(
-	cells: readonly Cell[],
-	germanWhisperLines: readonly GermanWhisperLine[]
-) {
-	const germanWhisperCells = getGermanWhisperCellIndexes(germanWhisperLines);
+function recalculateCandidates(cells: readonly Cell[]) {
 	for (const cell of cells) {
 		const peers = cells.filter(
 			(peer) =>
@@ -406,10 +447,8 @@ function recalculateCandidates(
 				peer.colNumber0based === cell.colNumber0based ||
 				peer.boxNumber === cell.boxNumber
 		);
-		cell.candidates = candidateDigits.map(
-			(digit) =>
-				!(digit === 5 && germanWhisperCells.has(getCellIndex(cell))) &&
-				peers.every((peer) => peer.fillNumber !== digit)
+		cell.candidates = candidateDigits.map((digit) =>
+			peers.every((peer) => peer.fillNumber !== digit)
 		);
 	}
 }
@@ -435,15 +474,23 @@ function restorePuzzleState(
 		setCandidateFlags(cell.boldCandidates, annotation.bold);
 	}
 	const germanWhisperLines =
+		definition.version === legacyPuzzleDefinitionVersion
+			? []
+			: definition.constraints.germanWhispers.map((line) => [...line]);
+	const killerCages =
 		definition.version === puzzleDefinitionVersion
-			? definition.constraints.germanWhispers.map((line) => [...line])
+			? definition.constraints.killerCages.map((cage) => ({
+					sum: cage.sum,
+					cells: [...cage.cells]
+				}))
 			: [];
 	// Calculated candidates are derived from effective values and are deliberately not serialized.
-	recalculateCandidates(cells, germanWhisperLines);
+	recalculateCandidates(cells);
 
 	return success({
 		gridState,
 		germanWhisperLines,
+		killerCages,
 		puzzlePhase: session.phase,
 		elapsedMilliseconds: session.elapsedMilliseconds
 	});

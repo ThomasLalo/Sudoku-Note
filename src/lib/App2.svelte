@@ -12,6 +12,7 @@
 	import Redo from '@lucide/svelte/icons/redo';
 	import Spotlight from '@lucide/svelte/icons/spotlight';
 	import Spline from '@lucide/svelte/icons/spline';
+	import Boxes from '@lucide/svelte/icons/boxes';
 	import SquareArrowRight from '@lucide/svelte/icons/square-arrow-right';
 	import Grid2x2Plus from '@lucide/svelte/icons/grid-2x2-plus';
 	import Undo from '@lucide/svelte/icons/undo';
@@ -22,9 +23,17 @@
 		areGermanWhispersComplete,
 		cutGermanWhisperLinesAtCells,
 		getCellIndex,
-		getGermanWhisperCellIndexes,
 		type GermanWhisperLine
 	} from './germanWhispers';
+	import {
+		areKillerCagesComplete,
+		getKillerCageCellIndexes,
+		getValidKillerCageSums,
+		killerCageCellsAreConnected,
+		maximumKillerCageSize,
+		removeKillerCagesAtCells,
+		type KillerCage
+	} from './killerCages';
 	import {
 		calculateElapsedMilliseconds,
 		formatElapsedTime,
@@ -78,6 +87,7 @@
 		puzzlePhase: PuzzlePhase;
 		cells: PuzzleEditCellSnapshot[];
 		germanWhisperLines: GermanWhisperLine[];
+		killerCages: KillerCage[];
 	};
 	const keypadModes: KeypadMode[] = [
 		'Enter digit',
@@ -93,6 +103,7 @@
 	let darkMode = $state(false);
 	let showSetupCandidates = $state(false);
 	let drawGermanWhispers = $state(false);
+	let drawKillerCages = $state(false);
 	let showLiveTimer = $state(false);
 	let startSolvingDialog: HTMLDialogElement;
 	let editPuzzleDialog: HTMLDialogElement;
@@ -101,6 +112,7 @@
 	let sharePuzzleDialog: HTMLDialogElement;
 	let replaceSharedPuzzleDialog: HTMLDialogElement;
 	let shareLinkErrorDialog: HTMLDialogElement;
+	let killerCageSumDialog: HTMLDialogElement;
 	let shareUrlInput: HTMLInputElement;
 	let appContainer: HTMLDivElement;
 	let layoutMode: LayoutMode = $state('stacked');
@@ -127,6 +139,9 @@
 	let multiSelect = $state(false);
 	let gridState: Cell[][] = $state(initializeGrid());
 	let germanWhisperLines: GermanWhisperLine[] = $state([]);
+	let killerCages: KillerCage[] = $state([]);
+	let pendingKillerCageCells: number[] = $state([]);
+	let validPendingKillerCageSums = $derived(getValidKillerCageSums(pendingKillerCageCells.length));
 	let undoHistory: PuzzleEditSnapshot[] = $state([]);
 	let redoHistory: PuzzleEditSnapshot[] = $state([]);
 	let canUndo = $derived(undoHistory.length > 0);
@@ -220,6 +235,7 @@
 		return (
 			puzzlePhase !== 'setup' ||
 			germanWhisperLines.length > 0 ||
+			killerCages.length > 0 ||
 			gridStateRows.flat().some((cell) => cell.fillNumber !== null)
 		);
 	}
@@ -238,7 +254,13 @@
 
 		try {
 			const value = encodeStoredPuzzleState(
-				serializePuzzleState(gridState, puzzlePhase, currentElapsedSnapshot(), germanWhisperLines)
+				serializePuzzleState(
+					gridState,
+					puzzlePhase,
+					currentElapsedSnapshot(),
+					germanWhisperLines,
+					killerCages
+				)
 			);
 			if (value === lastSavedPuzzleStorageValue) return;
 
@@ -273,6 +295,7 @@
 		clearTimerUpdates();
 		gridState = restored.value.gridState;
 		germanWhisperLines = restored.value.germanWhisperLines;
+		killerCages = restored.value.killerCages;
 		puzzlePhase = restored.value.puzzlePhase;
 		elapsedMilliseconds = restored.value.elapsedMilliseconds;
 		accumulatedActiveMilliseconds = restored.value.elapsedMilliseconds;
@@ -411,7 +434,8 @@
 		const values = gridStateRows.map((row) => row.map((cell) => cell.fillNumber));
 		if (
 			!isStandardSudokuComplete(values) ||
-			!areGermanWhispersComplete(values.flat(), germanWhisperLines)
+			!areGermanWhispersComplete(values.flat(), germanWhisperLines) ||
+			!areKillerCagesComplete(values.flat(), killerCages)
 		) {
 			return;
 		}
@@ -440,13 +464,10 @@
 	}
 
 	function recalculateCandidates(cells: Iterable<Cell>) {
-		const germanWhisperCells = getGermanWhisperCellIndexes(germanWhisperLines);
 		for (const cell of cells) {
 			const seenCells = getSeenCells(cell);
-			cell.candidates = keypadInts.map(
-				(candidate) =>
-					!(candidate === 5 && germanWhisperCells.has(getCellIndex(cell))) &&
-					seenCells.every((seenCell) => seenCell.fillNumber !== candidate)
+			cell.candidates = keypadInts.map((candidate) =>
+				seenCells.every((seenCell) => seenCell.fillNumber !== candidate)
 			);
 		}
 	}
@@ -474,10 +495,59 @@
 		});
 	}
 
+	function requestKillerCage(cellIndexes: number[]) {
+		if (
+			puzzlePhase !== 'setup' ||
+			cellIndexes.length < 1 ||
+			cellIndexes.length > maximumKillerCageSize ||
+			new Set(cellIndexes).size !== cellIndexes.length ||
+			!killerCageCellsAreConnected(cellIndexes) ||
+			cellIndexes.some((cellIndex) => getKillerCageCellIndexes(killerCages).has(cellIndex))
+		) {
+			return;
+		}
+
+		pendingKillerCageCells = [...cellIndexes].sort((left, right) => left - right);
+		void tick().then(() => killerCageSumDialog.showModal());
+	}
+
+	function commitKillerCage(sum: number) {
+		if (
+			puzzlePhase !== 'setup' ||
+			pendingKillerCageCells.length === 0 ||
+			!validPendingKillerCageSums.includes(sum)
+		) {
+			return;
+		}
+
+		const cells = [...pendingKillerCageCells];
+		performPuzzleEdit(() => {
+			killerCages = [...killerCages, { sum, cells }];
+			recalculateCandidates(gridState.flat());
+		});
+		killerCageSumDialog.close();
+	}
+
+	function handleKillerCageDialogClose() {
+		pendingKillerCageCells = [];
+		void tick().then(() => document.querySelector<HTMLElement>('.sudoku-grid')?.focus());
+	}
+
+	function setGermanWhisperDrawing(checked: boolean) {
+		drawGermanWhispers = checked;
+		if (checked) drawKillerCages = false;
+	}
+
+	function setKillerCageDrawing(checked: boolean) {
+		drawKillerCages = checked;
+		if (checked) drawGermanWhispers = false;
+	}
+
 	function capturePuzzleEditSnapshot(): PuzzleEditSnapshot {
 		return {
 			puzzlePhase,
 			germanWhisperLines: germanWhisperLines.map((line) => [...line]),
+			killerCages: killerCages.map((cage) => ({ sum: cage.sum, cells: [...cage.cells] })),
 			cells: gridState.flat().map((cell) => ({
 				fillNumber: cell.fillNumber,
 				isClue: cell.isClue,
@@ -503,6 +573,15 @@
 						(cellIndex, pointIndex) => cellIndex === right.germanWhisperLines[index][pointIndex]
 					)
 			) &&
+			left.killerCages.length === right.killerCages.length &&
+			left.killerCages.every((cage, index) => {
+				const otherCage = right.killerCages[index];
+				return (
+					cage.sum === otherCage.sum &&
+					cage.cells.length === otherCage.cells.length &&
+					cage.cells.every((cellIndex, cellPosition) => cellIndex === otherCage.cells[cellPosition])
+				);
+			}) &&
 			left.cells.length === right.cells.length &&
 			left.cells.every((cell, index) => {
 				const otherCell = right.cells[index];
@@ -546,6 +625,7 @@
 
 		const previousPhase = puzzlePhase;
 		germanWhisperLines = snapshot.germanWhisperLines.map((line) => [...line]);
+		killerCages = snapshot.killerCages.map((cage) => ({ sum: cage.sum, cells: [...cage.cells] }));
 		for (const [index, cell] of cells.entries()) {
 			const savedCell = snapshot.cells[index];
 			cell.fillNumber = savedCell.fillNumber;
@@ -599,6 +679,7 @@
 			if (puzzlePhase === 'setup') {
 				const deletedCellIndexes = new Set(editableCells.map(getCellIndex));
 				germanWhisperLines = cutGermanWhisperLinesAtCells(germanWhisperLines, deletedCellIndexes);
+				killerCages = removeKillerCagesAtCells(killerCages, deletedCellIndexes);
 			}
 			for (const cell of editableCells) {
 				cell.fillNumber = null;
@@ -793,6 +874,7 @@
 		}
 		puzzlePhase = 'solving';
 		drawGermanWhispers = false;
+		drawKillerCages = false;
 		openInfoSection = 'guide';
 		keypadMode = 'Enter digit';
 		revealedNumber = null;
@@ -874,6 +956,7 @@
 		openInfoSection = 'guide';
 		showSetupCandidates = false;
 		drawGermanWhispers = false;
+		drawKillerCages = false;
 		keypadMode = 'Enter digit';
 		revealedNumber = null;
 		multiSelect = false;
@@ -897,11 +980,13 @@
 		resetPuzzleEditHistory();
 		gridState = initializeGrid();
 		germanWhisperLines = [];
+		killerCages = [];
 		puzzlePhase = 'setup';
 		displayedPanel = 'Keypad';
 		openInfoSection = 'guide';
 		showSetupCandidates = false;
 		drawGermanWhispers = false;
+		drawKillerCages = false;
 		keypadMode = 'Enter digit';
 		revealedNumber = null;
 		multiSelect = false;
@@ -940,11 +1025,13 @@
 		resetPuzzleEditHistory();
 		gridState = sharedPuzzle.gridState;
 		germanWhisperLines = sharedPuzzle.germanWhisperLines;
+		killerCages = sharedPuzzle.killerCages;
 		puzzlePhase = 'setup';
 		displayedPanel = 'Keypad';
 		openInfoSection = 'guide';
 		showSetupCandidates = false;
 		drawGermanWhispers = false;
+		drawKillerCages = false;
 		keypadMode = 'Enter digit';
 		revealedNumber = null;
 		multiSelect = false;
@@ -1006,7 +1093,7 @@
 	function showSharePuzzle() {
 		const result = createShareUrl(
 			window.location.href,
-			createPuzzleDefinition(gridState, germanWhisperLines)
+			createPuzzleDefinition(gridState, germanWhisperLines, killerCages)
 		);
 		if (!result.ok) {
 			shareLinkErrorTitle = 'Could not create share link';
@@ -1263,8 +1350,13 @@
 										<p>
 											For a German Whispers puzzle, select Draw German whispers and drag through
 											adjacent cells to copy each green line. Diagonal steps are supported. Retrace
-											a whole line to remove it, or select a cell and use Erase clue or line to cut
-											a gap at that cell.
+											a whole line to remove it, or select a cell and use Erase clue or constraint
+											to cut a gap at that cell.
+										</p>
+										<p>
+											For Killer Sudoku, select Draw killer cage and drag across cells that share an
+											edge. After you release, choose the cage total from the valid sums shown.
+											Cages cannot overlap and contain no repeated digits.
 										</p>
 									{:else}
 										<p>
@@ -1313,6 +1405,11 @@
 										Digits in cells joined by each green line must differ by at least 5. Therefore,
 										the digit 5 cannot appear anywhere on a German Whispers line.
 									</p>
+									<h3 class="text-primary rules-subheading">Killer Sudoku</h3>
+									<p>
+										Digits in each dashed cage must add to the small total in its top-left cell,
+										without repeating a digit within the cage.
+									</p>
 								</div>
 							{/if}
 						</section>
@@ -1351,8 +1448,12 @@
 												diagonals
 											</li>
 											<li>
-												<kbd>Backspace</kbd>, <kbd>Delete</kbd>, or Erase clue or line also cuts
-												green lines at the selected cells
+												Draw killer cage lets you drag through edge-adjacent cells, then choose a
+												sum
+											</li>
+											<li>
+												<kbd>Backspace</kbd>, <kbd>Delete</kbd>, or Erase clue or constraint cuts
+												green lines and removes cages at the selected cells
 											</li>
 										{:else}
 											<li><kbd>1–9</kbd> use the selected keypad tool</li>
@@ -1454,7 +1555,10 @@
 				bind:gridState
 				bind:gridStateRows
 				{germanWhisperLines}
+				{killerCages}
+				{pendingKillerCageCells}
 				{drawGermanWhispers}
+				{drawKillerCages}
 				bind:selectedCells
 				bind:lastSelected
 				{flippedNotes}
@@ -1464,6 +1568,7 @@
 				revealedNumber={activeKeypadMode === 'Reveal all candidates' ? revealedNumber : null}
 				{clearCells}
 				{commitGermanWhisperLine}
+				{requestKillerCage}
 				handleNumberInput={handleKeyboardNumber}
 			/>
 		</IsometricBorder>
@@ -1488,7 +1593,7 @@
 						<div class="tool-keypad">
 							{#if puzzlePhase === 'setup'}
 								<KeypadButton
-									label="Erase clue or line"
+									label="Erase clue or constraint"
 									color="secondary"
 									onchangeHandler={() => clearCells(selectedCells)}
 								>
@@ -1514,8 +1619,18 @@
 									color="primary"
 									checkbox
 									bind:checked={drawGermanWhispers}
+									oncheckedchange={setGermanWhisperDrawing}
 								>
 									<Spline />
+								</KeypadButton>
+								<KeypadButton
+									label="Draw killer cage"
+									color="secondary"
+									checkbox
+									bind:checked={drawKillerCages}
+									oncheckedchange={setKillerCageDrawing}
+								>
+									<Boxes />
 								</KeypadButton>
 							{:else}
 								<KeypadButton
@@ -1605,6 +1720,30 @@
 </div>
 
 <dialog
+	class="confirmation-dialog killer-cage-dialog"
+	bind:this={killerCageSumDialog}
+	data-preserve-grid-selection
+	aria-labelledby="killer-cage-sum-title"
+	onclose={handleKillerCageDialogClose}
+	onkeydown={containDialogFocus}
+>
+	<h2 id="killer-cage-sum-title">Choose cage sum</h2>
+	<p>
+		{pendingKillerCageCells.length}
+		{pendingKillerCageCells.length === 1 ? 'cell' : 'cells'} selected. These are the possible totals
+		without repeated digits.
+	</p>
+	<div class="killer-cage-sums" aria-label="Valid cage sums">
+		{#each validPendingKillerCageSums as sum (sum)}
+			<button type="button" onclick={() => commitKillerCage(sum)}>{sum}</button>
+		{/each}
+	</div>
+	<div class="dialog-actions">
+		<button type="button" onclick={() => killerCageSumDialog.close()}>Cancel</button>
+	</div>
+</dialog>
+
+<dialog
 	class="confirmation-dialog"
 	bind:this={startSolvingDialog}
 	data-preserve-grid-selection
@@ -1613,7 +1752,10 @@
 >
 	<form method="dialog">
 		<h2 id="start-solving-title">Start solving?</h2>
-		<p>The current digits will become fixed clues and the solve timer will begin.</p>
+		<p>
+			The current digits will become fixed clues and the solve timer will begin. Variant constraints
+			will also be locked.
+		</p>
 		<div class="dialog-actions">
 			<button>Cancel</button>
 			<button type="button" onclick={startSolving}>Start solving</button>
@@ -1665,7 +1807,8 @@
 >
 	<h2 id="share-puzzle-title">Share puzzle</h2>
 	<p>
-		This link contains the fixed clues only, without solving progress, notes, time, or settings.
+		This link contains the fixed clues and variant constraints, without solving progress, notes,
+		time, or settings.
 	</p>
 	<label class="share-url-label" for="share-url">Share URL</label>
 	<input
@@ -2125,6 +2268,34 @@
 
 	.share-status {
 		min-height: 1.5em;
+	}
+
+	.killer-cage-dialog {
+		width: min(28rem, calc(100vw - 2rem));
+	}
+
+	.killer-cage-sums {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(3rem, 1fr));
+		gap: 0.5rem;
+		margin-top: 1rem;
+	}
+
+	.killer-cage-sums button {
+		min-height: 2.75rem;
+		padding: 0.4rem;
+		border: 2px solid var(--color-secondary);
+		color: var(--color-text);
+		background: var(--color-background-lightest);
+		font: inherit;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.killer-cage-sums button:hover,
+	.killer-cage-sums button:focus-visible {
+		color: var(--color-background-lightest);
+		background: var(--color-secondary);
 	}
 
 	.dialog-actions {

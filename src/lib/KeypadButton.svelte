@@ -5,6 +5,7 @@
 		label,
 		color,
 		onchangeHandler = () => {},
+		oncheckedchange = () => {},
 		toggle = false,
 		checkbox = false,
 		disabled = false,
@@ -16,6 +17,7 @@
 		label: string;
 		color: string;
 		onchangeHandler?: (event: MouseEvent) => void;
+		oncheckedchange?: (checked: boolean) => void;
 		toggle?: boolean;
 		checkbox?: boolean;
 		disabled?: boolean;
@@ -61,7 +63,13 @@
 					{label}
 				{/if}
 			</span>
-			<input type="checkbox" aria-label={label} {disabled} bind:checked />
+			<input
+				type="checkbox"
+				aria-label={label}
+				{disabled}
+				bind:checked
+				onchange={(event) => oncheckedchange(event.currentTarget.checked)}
+			/>
 			<div class="button-corner-square"></div>
 			<div class="button-right-parallelogram"></div>
 			<div class="button-bottom-parallelogram"></div>
