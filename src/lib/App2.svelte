@@ -1019,7 +1019,13 @@
 		const paddingLeft = cssPixels(styles.paddingLeft, 8);
 		const paddingRight = cssPixels(styles.paddingRight, 8 + panelEdge);
 		const bottomPadding = cssPixels(styles.paddingBottom, 8 + panelEdge);
-		const selectorHeight = cssPixels(styles.getPropertyValue('--text-control-height'), 24);
+		const defaultSelectorHeight = cssPixels(styles.getPropertyValue('--text-control-height'), 24);
+		const selectorElement = appContainer.querySelector<HTMLElement>(
+			'.layout-button-container .radio-container'
+		);
+		const selectorHeight = selectorElement
+			? cssPixels(getComputedStyle(selectorElement).height, defaultSelectorHeight)
+			: defaultSelectorHeight;
 
 		const contentWidth = width - paddingLeft - paddingRight;
 		const sideColumnGap = panelEdge + sectionGap;
@@ -1762,11 +1768,14 @@
 	}
 
 	.settings-action-button {
+		max-width: 100%;
 		min-height: var(--text-control-height);
 		padding: 0.35rem 0.75rem;
 		border: 2px solid var(--color-secondary);
 		color: var(--color-secondary);
 		background: var(--color-background-lightest);
+		white-space: normal;
+		overflow-wrap: anywhere;
 		cursor: pointer;
 	}
 
@@ -1823,11 +1832,11 @@
 	}
 
 	.layout-side {
-		grid-template-columns: var(--grid-size) max-content minmax(0, 1fr);
+		grid-template-columns: var(--grid-size) minmax(0, 1fr);
 		grid-template-rows: auto minmax(0, 1fr);
 		grid-template-areas:
-			'sudoku button .'
-			'sudoku panel .';
+			'sudoku button'
+			'sudoku panel';
 		column-gap: calc(var(--panel-border-width) + var(--section-gap));
 	}
 
@@ -1907,6 +1916,68 @@
 	.allow-layout-overflow {
 		overflow-y: auto;
 		grid-template-rows: var(--grid-size) auto auto;
+	}
+
+	@media (max-width: 600px) {
+		.layout-button-container {
+			--size-font: 0.875rem;
+		}
+
+		.layout-button-container :global(.radio-container) {
+			width: calc(var(--box-width) - 0.75rem);
+			height: 36px;
+		}
+
+		.layout-button-container :global(.radio-container .button-right-parallelogram) {
+			height: 100%;
+		}
+
+		.layout-button-container :global(.radio-container .button-bottom-parallelogram),
+		.layout-button-container
+			:global(.radio-container .button-face:has(input:checked) .button-bottom-parallelogram),
+		.layout-button-container
+			:global(.radio-container .button-face:active .button-bottom-parallelogram) {
+			width: 100%;
+		}
+
+		.layout-stacked:has(.left-panel) {
+			--mobile-info-grid-size: min(var(--grid-size), max(300px, 82vw));
+
+			grid-template-rows: var(--mobile-info-grid-size) auto minmax(0, 1fr);
+		}
+
+		.layout-stacked:has(.left-panel) .sudoku-grid-container {
+			height: var(--mobile-info-grid-size);
+			width: var(--mobile-info-grid-size);
+		}
+
+		.layout-stacked .info-content {
+			max-height: calc(
+				var(--info-panel-max-height) + var(--grid-size) - var(--mobile-info-grid-size)
+			);
+			font-size: 0.875rem;
+			line-height: 1.45;
+		}
+
+		.layout-stacked .puzzle-phase {
+			margin-bottom: 0.75rem;
+			font-size: 1.5rem;
+			line-height: 1.2;
+		}
+
+		.layout-stacked .accordion-trigger {
+			padding: 0.375rem 0.625rem;
+			font-size: 0.9375rem;
+			line-height: 1.25;
+		}
+
+		.layout-stacked .accordion-indicator {
+			font-size: 1rem;
+		}
+
+		.layout-stacked .accordion-panel {
+			padding: 0.625rem;
+		}
 	}
 
 	.confirmation-dialog {
