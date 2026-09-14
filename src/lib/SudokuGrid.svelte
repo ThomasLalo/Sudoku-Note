@@ -2,6 +2,12 @@
 	import { onMount } from 'svelte';
 	import type { Cell } from './gridUtils';
 	import { getAdjacentCell } from './gridUtils';
+	import {
+		areAdjacentCellIndexes,
+		getCellIndex,
+		getGermanWhisperConflictIndexes,
+		type GermanWhisperLine
+	} from './germanWhispers';
 	const keypadInts = [7, 8, 9, 4, 5, 6, 1, 2, 3];
 	const flippedInts = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 	const cellGridLines = [1, 2, 4, 5, 7, 8];
@@ -125,6 +131,8 @@
 	let {
 		gridState = $bindable(),
 		gridStateRows = $bindable(),
+		germanWhisperLines,
+		drawGermanWhispers,
 		selectedCells = $bindable(),
 		lastSelected = $bindable(),
 		flippedNotes,
@@ -133,10 +141,13 @@
 		showCandidates,
 		revealedNumber,
 		handleNumberInput,
-		clearCells
+		clearCells,
+		commitGermanWhisperLine
 	}: {
 		gridState: Cell[][];
 		gridStateRows: Cell[][];
+		germanWhisperLines: GermanWhisperLine[];
+		drawGermanWhispers: boolean;
 		selectedCells: Cell[];
 		lastSelected: Cell;
 		flippedNotes: boolean;
@@ -146,6 +157,7 @@
 		revealedNumber: number | null;
 		handleNumberInput: (value: number, event: KeyboardEvent) => void;
 		clearCells: (targetCells: Cell[]) => void;
+		commitGermanWhisperLine: (line: GermanWhisperLine) => void;
 	} = $props();
 
 	let candidateInts = $derived(flippedNotes ? flippedInts : keypadInts);
@@ -173,6 +185,15 @@
 			}
 		}
 
+		const rowMajorCells = gridStateRows.flat();
+		const germanWhisperConflicts = getGermanWhisperConflictIndexes(
+			rowMajorCells.map((cell) => cell.fillNumber),
+			germanWhisperLines
+		);
+		for (const cellIndex of germanWhisperConflicts) {
+			conflicts.add(rowMajorCells[cellIndex]);
+		}
+
 		for (const cell of gridStateRows.flat()) {
 			for (const [candidateIndex, manuallyAdded] of cell.manuallyAddedCandidates.entries()) {
 				if (!manuallyAdded || cell.candidates[candidateIndex]) continue;
@@ -196,6 +217,8 @@
 	let activePointerId: number | null = null;
 	let lastPointerPosition: { x: number; y: number } | null = null;
 	let lastGestureCell: Cell | null = null;
+	let drawingWhisperGesture = false;
+	let draftGermanWhisperLine: GermanWhisperLine = $state([]);
 	let hoveredCell: Cell | null = $state(null);
 
 	const isCellSelected = (row: number, col: number) =>
@@ -243,6 +266,18 @@
 		activePointerId = event.pointerId;
 		lastPointerPosition = { x: event.clientX, y: event.clientY };
 		const cellObj = gridState[boxNumber][cellNumber];
+		if (drawGermanWhispers && puzzlePhase === 'setup') {
+			clearSelection();
+			drawingWhisperGesture = true;
+			draftGermanWhisperLine = [getCellIndex(cellObj)];
+			lastGestureCell = cellObj;
+			try {
+				gridElement?.setPointerCapture(event.pointerId);
+			} catch {
+				// Synthetic pointer events and interrupted gestures may not be capturable.
+			}
+			return;
+		}
 		if (!event.shiftKey && !multiSelect) {
 			clearSelection();
 		}
@@ -272,6 +307,26 @@
 		return gridState[boxIndex]?.[cellIndex] ?? null;
 	}
 
+	function getWhisperCellAtPoint(x: number, y: number) {
+		const cell = getCellAtPoint(x, y);
+		const bounds = cell?.element?.getBoundingClientRect();
+		if (!cell || !bounds) return null;
+
+		// Ignore edges where a diagonal gesture can briefly cross a side neighbor.
+		const horizontalInset = bounds.width * 0.15;
+		const verticalInset = bounds.height * 0.15;
+		if (
+			x < bounds.left + horizontalInset ||
+			x > bounds.right - horizontalInset ||
+			y < bounds.top + verticalInset ||
+			y > bounds.bottom - verticalInset
+		) {
+			return null;
+		}
+
+		return cell;
+	}
+
 	function applyDragToCell(cell: Cell | null) {
 		if (!cell || cell === lastGestureCell) return;
 
@@ -280,6 +335,29 @@
 		} else if (dragRemoving) {
 			removeFromSelection(cell.boxNumber - 1, cell.positionInBox - 1);
 		}
+		lastGestureCell = cell;
+	}
+
+	function applyWhisperDragToCell(cell: Cell | null) {
+		if (!cell) return;
+
+		const cellIndex = getCellIndex(cell);
+		const lastCellIndex = draftGermanWhisperLine.at(-1);
+		if (lastCellIndex === undefined || cellIndex === lastCellIndex) return;
+
+		if (draftGermanWhisperLine.at(-2) === cellIndex) {
+			draftGermanWhisperLine = draftGermanWhisperLine.slice(0, -1);
+			lastGestureCell = cell;
+			return;
+		}
+		if (
+			!areAdjacentCellIndexes(lastCellIndex, cellIndex) ||
+			draftGermanWhisperLine.includes(cellIndex)
+		) {
+			return;
+		}
+
+		draftGermanWhisperLine = [...draftGermanWhisperLine, cellIndex];
 		lastGestureCell = cell;
 	}
 
@@ -298,21 +376,30 @@
 
 		for (let step = 1; step <= steps; step += 1) {
 			const progress = step / steps;
-			applyDragToCell(
-				getCellAtPoint(
-					lastPointerPosition.x + xDistance * progress,
-					lastPointerPosition.y + yDistance * progress
-				)
-			);
+			const sampledX = lastPointerPosition.x + xDistance * progress;
+			const sampledY = lastPointerPosition.y + yDistance * progress;
+			const sampledCell = drawingWhisperGesture
+				? getWhisperCellAtPoint(sampledX, sampledY)
+				: getCellAtPoint(sampledX, sampledY);
+			if (drawingWhisperGesture) {
+				applyWhisperDragToCell(sampledCell);
+			} else {
+				applyDragToCell(sampledCell);
+			}
 		}
 		lastPointerPosition = { x: event.clientX, y: event.clientY };
 	}
 
 	function finishPointerGesture(event: PointerEvent) {
 		if (event.pointerId !== activePointerId) return;
+		if (drawingWhisperGesture && event.type === 'pointerup' && draftGermanWhisperLine.length >= 2) {
+			commitGermanWhisperLine([...draftGermanWhisperLine]);
+		}
 
 		dragAdding = false;
 		dragRemoving = false;
+		drawingWhisperGesture = false;
+		draftGermanWhisperLine = [];
 		activePointerId = null;
 		lastPointerPosition = null;
 		lastGestureCell = null;
@@ -321,6 +408,12 @@
 		if (gridElement?.hasPointerCapture(event.pointerId)) {
 			gridElement.releasePointerCapture(event.pointerId);
 		}
+	}
+
+	function germanWhisperPoints(line: GermanWhisperLine) {
+		return line
+			.map((cellIndex) => `${(cellIndex % 9) + 0.5},${Math.floor(cellIndex / 9) + 0.5}`)
+			.join(' ');
 	}
 
 	let gridElement: HTMLDivElement | undefined; // grid element might be undefined when the page first loads. see the bind:this on sudoku-grid in the html
@@ -459,6 +552,7 @@
 <!-- Keyboard interaction uses the grid's selection state through the window keydown handler. -->
 <div
 	class="sudoku-grid"
+	class:drawing-german-whispers={drawGermanWhispers && puzzlePhase === 'setup'}
 	bind:this={gridElement}
 	style={gridGeometry.style}
 	tabindex="-1"
@@ -480,13 +574,22 @@
 		{/each}
 	</div>
 
-	<!-- Variant graphics such as arrows and whisper lines will live here. -->
 	<svg
 		class="grid-layer variant-layer"
 		viewBox="0 0 9 9"
 		preserveAspectRatio="none"
 		aria-hidden="true"
-	></svg>
+	>
+		{#each germanWhisperLines as line, lineIndex (`${lineIndex}-${line.join('-')}`)}
+			<polyline class="german-whisper-line" points={germanWhisperPoints(line)}></polyline>
+		{/each}
+		{#if draftGermanWhisperLine.length >= 2}
+			<polyline
+				class="german-whisper-line german-whisper-line-draft"
+				points={germanWhisperPoints(draftGermanWhisperLine)}
+			></polyline>
+		{/if}
+	</svg>
 
 	<svg class="grid-layer selection-layer" aria-hidden="true">
 		{#each gridStateRows as row (row[0].rowNumber0based)}
@@ -767,6 +870,18 @@
 		z-index: 10;
 	}
 
+	.german-whisper-line {
+		fill: none;
+		stroke: #69a969;
+		stroke-width: 0.18;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+
+	.german-whisper-line-draft {
+		opacity: 0.65;
+	}
+
 	.selection-layer {
 		z-index: 20;
 	}
@@ -859,6 +974,10 @@
 		min-height: 0;
 		background-color: transparent;
 		user-select: none;
+	}
+
+	.drawing-german-whispers .sudoku-cell {
+		cursor: crosshair;
 	}
 
 	.value-container {

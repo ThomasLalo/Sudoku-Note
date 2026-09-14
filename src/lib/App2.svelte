@@ -11,12 +11,20 @@
 	import Play from '@lucide/svelte/icons/play';
 	import Redo from '@lucide/svelte/icons/redo';
 	import Spotlight from '@lucide/svelte/icons/spotlight';
+	import Spline from '@lucide/svelte/icons/spline';
 	import SquareArrowRight from '@lucide/svelte/icons/square-arrow-right';
 	import Grid2x2Plus from '@lucide/svelte/icons/grid-2x2-plus';
 	import Undo from '@lucide/svelte/icons/undo';
 	import { onMount, tick } from 'svelte';
 	import type { Cell } from './gridUtils';
 	import { initializeGrid } from './gridUtils';
+	import {
+		areGermanWhispersComplete,
+		cutGermanWhisperLinesAtCells,
+		getCellIndex,
+		getGermanWhisperCellIndexes,
+		type GermanWhisperLine
+	} from './germanWhispers';
 	import {
 		calculateElapsedMilliseconds,
 		formatElapsedTime,
@@ -69,6 +77,7 @@
 	type PuzzleEditSnapshot = {
 		puzzlePhase: PuzzlePhase;
 		cells: PuzzleEditCellSnapshot[];
+		germanWhisperLines: GermanWhisperLine[];
 	};
 	const keypadModes: KeypadMode[] = [
 		'Enter digit',
@@ -83,6 +92,7 @@
 	let openInfoSection: InfoSection | null = $state('guide');
 	let darkMode = $state(false);
 	let showSetupCandidates = $state(false);
+	let drawGermanWhispers = $state(false);
 	let showLiveTimer = $state(false);
 	let startSolvingDialog: HTMLDialogElement;
 	let editPuzzleDialog: HTMLDialogElement;
@@ -116,6 +126,7 @@
 	let returnToRevealAfterEdits = $state(true);
 	let multiSelect = $state(false);
 	let gridState: Cell[][] = $state(initializeGrid());
+	let germanWhisperLines: GermanWhisperLine[] = $state([]);
 	let undoHistory: PuzzleEditSnapshot[] = $state([]);
 	let redoHistory: PuzzleEditSnapshot[] = $state([]);
 	let canUndo = $derived(undoHistory.length > 0);
@@ -206,7 +217,11 @@
 	}
 
 	function hasMeaningfulPuzzleState() {
-		return puzzlePhase !== 'setup' || gridStateRows.flat().some((cell) => cell.fillNumber !== null);
+		return (
+			puzzlePhase !== 'setup' ||
+			germanWhisperLines.length > 0 ||
+			gridStateRows.flat().some((cell) => cell.fillNumber !== null)
+		);
 	}
 
 	function persistCurrentPuzzle() {
@@ -223,7 +238,7 @@
 
 		try {
 			const value = encodeStoredPuzzleState(
-				serializePuzzleState(gridState, puzzlePhase, currentElapsedSnapshot())
+				serializePuzzleState(gridState, puzzlePhase, currentElapsedSnapshot(), germanWhisperLines)
 			);
 			if (value === lastSavedPuzzleStorageValue) return;
 
@@ -257,6 +272,7 @@
 
 		clearTimerUpdates();
 		gridState = restored.value.gridState;
+		germanWhisperLines = restored.value.germanWhisperLines;
 		puzzlePhase = restored.value.puzzlePhase;
 		elapsedMilliseconds = restored.value.elapsedMilliseconds;
 		accumulatedActiveMilliseconds = restored.value.elapsedMilliseconds;
@@ -393,7 +409,12 @@
 		if (puzzlePhase !== 'solving') return;
 
 		const values = gridStateRows.map((row) => row.map((cell) => cell.fillNumber));
-		if (!isStandardSudokuComplete(values)) return;
+		if (
+			!isStandardSudokuComplete(values) ||
+			!areGermanWhispersComplete(values.flat(), germanWhisperLines)
+		) {
+			return;
+		}
 
 		pauseActiveTimerSegment();
 		puzzlePhase = 'completed';
@@ -419,17 +440,44 @@
 	}
 
 	function recalculateCandidates(cells: Iterable<Cell>) {
+		const germanWhisperCells = getGermanWhisperCellIndexes(germanWhisperLines);
 		for (const cell of cells) {
 			const seenCells = getSeenCells(cell);
-			cell.candidates = keypadInts.map((candidate) =>
-				seenCells.every((seenCell) => seenCell.fillNumber !== candidate)
+			cell.candidates = keypadInts.map(
+				(candidate) =>
+					!(candidate === 5 && germanWhisperCells.has(getCellIndex(cell))) &&
+					seenCells.every((seenCell) => seenCell.fillNumber !== candidate)
 			);
 		}
+	}
+
+	function sameGermanWhisperLine(left: GermanWhisperLine, right: GermanWhisperLine) {
+		return (
+			left.length === right.length &&
+			(left.every((cellIndex, index) => cellIndex === right[index]) ||
+				left.every((cellIndex, index) => cellIndex === right[right.length - 1 - index]))
+		);
+	}
+
+	function commitGermanWhisperLine(line: GermanWhisperLine) {
+		if (puzzlePhase !== 'setup') return;
+
+		performPuzzleEdit(() => {
+			const matchingIndex = germanWhisperLines.findIndex((existingLine) =>
+				sameGermanWhisperLine(existingLine, line)
+			);
+			germanWhisperLines =
+				matchingIndex === -1
+					? [...germanWhisperLines, [...line]]
+					: germanWhisperLines.filter((_, index) => index !== matchingIndex);
+			recalculateCandidates(gridState.flat());
+		});
 	}
 
 	function capturePuzzleEditSnapshot(): PuzzleEditSnapshot {
 		return {
 			puzzlePhase,
+			germanWhisperLines: germanWhisperLines.map((line) => [...line]),
 			cells: gridState.flat().map((cell) => ({
 				fillNumber: cell.fillNumber,
 				isClue: cell.isClue,
@@ -447,6 +495,14 @@
 	function puzzleEditSnapshotsMatch(left: PuzzleEditSnapshot, right: PuzzleEditSnapshot) {
 		return (
 			left.puzzlePhase === right.puzzlePhase &&
+			left.germanWhisperLines.length === right.germanWhisperLines.length &&
+			left.germanWhisperLines.every(
+				(line, index) =>
+					line.length === right.germanWhisperLines[index].length &&
+					line.every(
+						(cellIndex, pointIndex) => cellIndex === right.germanWhisperLines[index][pointIndex]
+					)
+			) &&
 			left.cells.length === right.cells.length &&
 			left.cells.every((cell, index) => {
 				const otherCell = right.cells[index];
@@ -489,6 +545,7 @@
 		if (cells.length !== snapshot.cells.length) return;
 
 		const previousPhase = puzzlePhase;
+		germanWhisperLines = snapshot.germanWhisperLines.map((line) => [...line]);
 		for (const [index, cell] of cells.entries()) {
 			const savedCell = snapshot.cells[index];
 			cell.fillNumber = savedCell.fillNumber;
@@ -539,11 +596,15 @@
 
 		performPuzzleEdit(() => {
 			const affectedCells = new Set(editableCells.flatMap((cell) => getSeenCells(cell)));
+			if (puzzlePhase === 'setup') {
+				const deletedCellIndexes = new Set(editableCells.map(getCellIndex));
+				germanWhisperLines = cutGermanWhisperLinesAtCells(germanWhisperLines, deletedCellIndexes);
+			}
 			for (const cell of editableCells) {
 				cell.fillNumber = null;
 				cell.isClue = false;
 			}
-			recalculateCandidates(affectedCells);
+			recalculateCandidates(puzzlePhase === 'setup' ? gridState.flat() : affectedCells);
 		});
 	}
 
@@ -731,6 +792,7 @@
 			cell.isClue = cell.fillNumber !== null;
 		}
 		puzzlePhase = 'solving';
+		drawGermanWhispers = false;
 		openInfoSection = 'guide';
 		keypadMode = 'Enter digit';
 		revealedNumber = null;
@@ -811,6 +873,7 @@
 		puzzlePhase = 'setup';
 		openInfoSection = 'guide';
 		showSetupCandidates = false;
+		drawGermanWhispers = false;
 		keypadMode = 'Enter digit';
 		revealedNumber = null;
 		multiSelect = false;
@@ -833,10 +896,12 @@
 		resetSolveTimer();
 		resetPuzzleEditHistory();
 		gridState = initializeGrid();
+		germanWhisperLines = [];
 		puzzlePhase = 'setup';
 		displayedPanel = 'Keypad';
 		openInfoSection = 'guide';
 		showSetupCandidates = false;
+		drawGermanWhispers = false;
 		keypadMode = 'Enter digit';
 		revealedNumber = null;
 		multiSelect = false;
@@ -874,10 +939,12 @@
 		resetSolveTimer();
 		resetPuzzleEditHistory();
 		gridState = sharedPuzzle.gridState;
+		germanWhisperLines = sharedPuzzle.germanWhisperLines;
 		puzzlePhase = 'setup';
 		displayedPanel = 'Keypad';
 		openInfoSection = 'guide';
 		showSetupCandidates = false;
+		drawGermanWhispers = false;
 		keypadMode = 'Enter digit';
 		revealedNumber = null;
 		multiSelect = false;
@@ -937,7 +1004,10 @@
 	}
 
 	function showSharePuzzle() {
-		const result = createShareUrl(window.location.href, createPuzzleDefinition(gridState));
+		const result = createShareUrl(
+			window.location.href,
+			createPuzzleDefinition(gridState, germanWhisperLines)
+		);
 		if (!result.ok) {
 			shareLinkErrorTitle = 'Could not create share link';
 			shareLinkErrorMessage = result.error.message;
@@ -1190,6 +1260,12 @@
 											then press the start solving button. The copied numbers will become fixed
 											clues, and the solving tools will become available.
 										</p>
+										<p>
+											For a German Whispers puzzle, select Draw German whispers and drag through
+											adjacent cells to copy each green line. Diagonal steps are supported. Retrace
+											a whole line to remove it, or select a cell and use Erase clue or line to cut
+											a gap at that cell.
+										</p>
 									{:else}
 										<p>
 											The numbers copied during Setup are now fixed clues. Select a cell and use the
@@ -1232,6 +1308,11 @@
 										Fill the grid with digits 1–9 so each appears once in every row, column, and 3×3
 										box.
 									</p>
+									<h3 class="text-primary rules-subheading">German Whispers</h3>
+									<p>
+										Digits in cells joined by each green line must differ by at least 5. Therefore,
+										the digit 5 cannot appear anywhere on a German Whispers line.
+									</p>
 								</div>
 							{/if}
 						</section>
@@ -1265,6 +1346,14 @@
 										<li><kbd>Shift</kbd> + <kbd>Arrow keys</kbd> extend the selection</li>
 										{#if puzzlePhase === 'setup'}
 											<li><kbd>1–9</kbd> enters or replaces clues</li>
+											<li>
+												Draw German whispers lets you drag through adjacent cells, including
+												diagonals
+											</li>
+											<li>
+												<kbd>Backspace</kbd>, <kbd>Delete</kbd>, or Erase clue or line also cuts
+												green lines at the selected cells
+											</li>
 										{:else}
 											<li><kbd>1–9</kbd> use the selected keypad tool</li>
 											<li><kbd>Space</kbd> cycles through keypad tools</li>
@@ -1364,6 +1453,8 @@
 			<SudokuGrid
 				bind:gridState
 				bind:gridStateRows
+				{germanWhisperLines}
+				{drawGermanWhispers}
 				bind:selectedCells
 				bind:lastSelected
 				{flippedNotes}
@@ -1372,6 +1463,7 @@
 				showCandidates={puzzlePhase !== 'setup' || showSetupCandidates}
 				revealedNumber={activeKeypadMode === 'Reveal all candidates' ? revealedNumber : null}
 				{clearCells}
+				{commitGermanWhisperLine}
 				handleNumberInput={handleKeyboardNumber}
 			/>
 		</IsometricBorder>
@@ -1396,7 +1488,7 @@
 						<div class="tool-keypad">
 							{#if puzzlePhase === 'setup'}
 								<KeypadButton
-									label="Erase clue"
+									label="Erase clue or line"
 									color="secondary"
 									onchangeHandler={() => clearCells(selectedCells)}
 								>
@@ -1416,6 +1508,14 @@
 									bind:checked={showSetupCandidates}
 								>
 									<Spotlight />
+								</KeypadButton>
+								<KeypadButton
+									label="Draw German whispers"
+									color="primary"
+									checkbox
+									bind:checked={drawGermanWhispers}
+								>
+									<Spline />
 								</KeypadButton>
 							{:else}
 								<KeypadButton
@@ -1751,6 +1851,10 @@
 		margin-bottom: 0.5rem;
 	}
 
+	.accordion-panel .rules-subheading {
+		margin-top: 1rem;
+	}
+
 	.accordion-panel p + p {
 		margin-top: 0.75rem;
 	}
@@ -1890,6 +1994,10 @@
 		display: grid;
 		grid-template-rows: repeat(3, var(--key-size));
 		gap: var(--keypad-gap);
+	}
+
+	.layout-stacked .secondary-keypad :global([title='Multi-select']) {
+		grid-row: 1;
 	}
 
 	.layout-wide {

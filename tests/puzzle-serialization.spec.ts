@@ -52,7 +52,8 @@ test('round-trips a versioned puzzle definition without solver or runtime state'
 	cells[0].element = { id: 'runtime-only' } as HTMLElement;
 	cells[0].candidates.fill(false);
 
-	const definition = createPuzzleDefinition(gridState);
+	const germanWhisperLines = [[0, 10, 11]];
+	const definition = createPuzzleDefinition(gridState, germanWhisperLines);
 	const serialized = serializePuzzleDefinition(definition);
 	const parsed = parsePuzzleDefinition(serialized);
 
@@ -60,7 +61,8 @@ test('round-trips a versioned puzzle definition without solver or runtime state'
 	expect(JSON.parse(serialized)).toEqual({
 		format: puzzleDefinitionFormat,
 		version: puzzleDefinitionVersion,
-		clues: Array.from({ length: 81 }, (_, index) => (index === 0 ? 5 : index === 10 ? 7 : null))
+		clues: Array.from({ length: 81 }, (_, index) => (index === 0 ? 5 : index === 10 ? 7 : null)),
+		constraints: { germanWhispers: germanWhisperLines }
 	});
 	for (const runtimeField of [
 		'fillNumber',
@@ -74,7 +76,6 @@ test('round-trips a versioned puzzle definition without solver or runtime state'
 	]) {
 		expect(serialized).not.toContain(runtimeField);
 	}
-	expect(serialized).not.toContain('constraints');
 });
 
 test('round-trips entries, candidate annotations, phase, and current active time', () => {
@@ -111,6 +112,7 @@ test('round-trips entries, candidate annotations, phase, and current active time
 	const restoredCells = rowMajorCells(restored.value.gridState);
 	expect(restored.value.puzzlePhase).toBe('solving');
 	expect(restored.value.elapsedMilliseconds).toBe(1_500);
+	expect(restored.value.germanWhisperLines).toEqual([]);
 	expect(restoredCells[0]).toMatchObject({ fillNumber: 5, isClue: true });
 	expect(restoredCells[1]).toMatchObject({ fillNumber: 3, isClue: false });
 	expect(restoredCells[2].manuallyAddedCandidates[candidateDigits.indexOf(4)]).toBe(true);
@@ -142,6 +144,34 @@ test('round-trips entries, candidate annotations, phase, and current active time
 	]) {
 		expect(serialized.solveSession).not.toContain(runtimeField);
 	}
+});
+
+test('round-trips German Whispers and excludes 5 from calculated line candidates', () => {
+	const gridState = initializeGrid();
+	const germanWhisperLines = [
+		[0, 10, 11],
+		[72, 64]
+	];
+	const serialized = serializePuzzleState(gridState, 'setup', 0, germanWhisperLines);
+	const restored = deserializePuzzleState(serialized.puzzleDefinition, serialized.solveSession);
+
+	expect(restored.ok).toBe(true);
+	if (!restored.ok) return;
+	expect(restored.value.germanWhisperLines).toEqual(germanWhisperLines);
+
+	const restoredCells = rowMajorCells(restored.value.gridState);
+	const fiveIndex = candidateDigits.indexOf(5);
+	for (const cellIndex of [0, 10, 11, 72, 64]) {
+		expect(restoredCells[cellIndex].candidates[fiveIndex]).toBe(false);
+	}
+	expect(restoredCells[1].candidates[fiveIndex]).toBe(true);
+
+	const definition = JSON.parse(serialized.puzzleDefinition) as Record<string, unknown>;
+	expect(
+		parsePuzzleDefinition(
+			JSON.stringify({ ...definition, constraints: { germanWhispers: [[0, 2]] } })
+		)
+	).toMatchObject({ ok: false, error: { code: 'invalid-data' } });
 });
 
 test('restores Completed data while preserving clue-versus-entry identity', () => {

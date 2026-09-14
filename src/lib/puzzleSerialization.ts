@@ -1,5 +1,12 @@
 import type { Cell } from './gridUtils';
 import { initializeGrid } from './gridUtils';
+import {
+	areGermanWhispersComplete,
+	getCellIndex,
+	getGermanWhisperCellIndexes,
+	isGermanWhisperLine,
+	type GermanWhisperLine
+} from './germanWhispers';
 import { isStandardSudokuComplete } from './puzzleLifecycle';
 
 const sudokuSize = 9;
@@ -8,21 +15,29 @@ const candidateDigits = [7, 8, 9, 4, 5, 6, 1, 2, 3] as const;
 
 export const puzzleDefinitionFormat = 'sudoku-note-puzzle-definition';
 export const solveSessionFormat = 'sudoku-note-solve-session';
-export const puzzleDefinitionVersion = 1;
+export const legacyPuzzleDefinitionVersion = 1;
+export const puzzleDefinitionVersion = 2;
 export const solveSessionVersion = 1;
 
 export type PuzzlePhase = 'setup' | 'solving' | 'completed';
 type CellValue = number | null;
 
-/**
- * Version 1 intentionally describes only a standard Sudoku clue grid. A future concrete variant
- * domain should add a new supported definition version instead of passing through unknown data.
- */
 export interface PuzzleDefinitionV1 {
+	format: typeof puzzleDefinitionFormat;
+	version: typeof legacyPuzzleDefinitionVersion;
+	clues: CellValue[];
+}
+
+export interface PuzzleDefinitionV2 {
 	format: typeof puzzleDefinitionFormat;
 	version: typeof puzzleDefinitionVersion;
 	clues: CellValue[];
+	constraints: {
+		germanWhispers: GermanWhisperLine[];
+	};
 }
+
+export type PuzzleDefinition = PuzzleDefinitionV1 | PuzzleDefinitionV2;
 
 export interface CandidateAnnotationsV1 {
 	cell: number;
@@ -47,6 +62,7 @@ export interface SerializedPuzzleState {
 
 export interface RestoredPuzzleState {
 	gridState: Cell[][];
+	germanWhisperLines: GermanWhisperLine[];
 	puzzlePhase: PuzzlePhase;
 	elapsedMilliseconds: number;
 }
@@ -125,7 +141,7 @@ function parseJson(input: string, label: string): ParseResult<unknown> {
 	}
 }
 
-export function parsePuzzleDefinition(input: string): ParseResult<PuzzleDefinitionV1> {
+export function parsePuzzleDefinition(input: string): ParseResult<PuzzleDefinition> {
 	const parsed = parseJson(input, 'Puzzle definition');
 	if (!parsed.ok) return parsed;
 
@@ -133,21 +149,36 @@ export function parsePuzzleDefinition(input: string): ParseResult<PuzzleDefiniti
 	if (!isRecord(value) || value.format !== puzzleDefinitionFormat) {
 		return failure('invalid-data', 'Puzzle definition has an invalid format.');
 	}
-	if (Number.isInteger(value.version) && value.version !== puzzleDefinitionVersion) {
+	if (
+		Number.isInteger(value.version) &&
+		value.version !== legacyPuzzleDefinitionVersion &&
+		value.version !== puzzleDefinitionVersion
+	) {
 		return failure(
 			'unsupported-version',
 			`Puzzle definition version ${value.version} is not supported.`
 		);
 	}
+	if (value.version === legacyPuzzleDefinitionVersion) {
+		if (!hasExactKeys(value, ['format', 'version', 'clues']) || !isCellValues(value.clues)) {
+			return failure('invalid-data', 'Puzzle definition contains invalid data.');
+		}
+		return success(value as unknown as PuzzleDefinitionV1);
+	}
+
 	if (
 		value.version !== puzzleDefinitionVersion ||
-		!hasExactKeys(value, ['format', 'version', 'clues']) ||
-		!isCellValues(value.clues)
+		!hasExactKeys(value, ['format', 'version', 'clues', 'constraints']) ||
+		!isCellValues(value.clues) ||
+		!isRecord(value.constraints) ||
+		!hasExactKeys(value.constraints, ['germanWhispers']) ||
+		!Array.isArray(value.constraints.germanWhispers) ||
+		!value.constraints.germanWhispers.every(isGermanWhisperLine)
 	) {
 		return failure('invalid-data', 'Puzzle definition contains invalid data.');
 	}
 
-	return success(value as unknown as PuzzleDefinitionV1);
+	return success(value as unknown as PuzzleDefinitionV2);
 }
 
 export function parseSolveSession(input: string): ParseResult<SolveSessionV1> {
@@ -228,13 +259,20 @@ function enabledCandidateDigits(flags: readonly boolean[]) {
 }
 
 export function createPuzzleDefinition(
-	gridState: readonly (readonly Cell[])[]
-): PuzzleDefinitionV1 {
+	gridState: readonly (readonly Cell[])[],
+	germanWhisperLines: readonly GermanWhisperLine[] = []
+): PuzzleDefinitionV2 {
 	const cells = getRowMajorCells(gridState);
+	if (!germanWhisperLines.every(isGermanWhisperLine)) {
+		throw new Error('Cannot serialize invalid German Whispers lines.');
+	}
 	return {
 		format: puzzleDefinitionFormat,
 		version: puzzleDefinitionVersion,
-		clues: cells.map((cell) => (cell.isClue ? cell.fillNumber : null))
+		clues: cells.map((cell) => (cell.isClue ? cell.fillNumber : null)),
+		constraints: {
+			germanWhispers: germanWhisperLines.map((line) => [...line])
+		}
 	};
 }
 
@@ -284,7 +322,7 @@ export function createSolveSession(
 	return session;
 }
 
-export function serializePuzzleDefinition(definition: PuzzleDefinitionV1) {
+export function serializePuzzleDefinition(definition: PuzzleDefinition) {
 	return JSON.stringify(definition);
 }
 
@@ -299,16 +337,19 @@ export function serializeSolveSession(session: SolveSessionV1) {
 export function serializePuzzleState(
 	gridState: readonly (readonly Cell[])[],
 	phase: PuzzlePhase,
-	elapsedMilliseconds: number
+	elapsedMilliseconds: number,
+	germanWhisperLines: readonly GermanWhisperLine[] = []
 ): SerializedPuzzleState {
 	return {
-		puzzleDefinition: serializePuzzleDefinition(createPuzzleDefinition(gridState)),
+		puzzleDefinition: serializePuzzleDefinition(
+			createPuzzleDefinition(gridState, germanWhisperLines)
+		),
 		solveSession: serializeSolveSession(createSolveSession(gridState, phase, elapsedMilliseconds))
 	};
 }
 
 function validateCombinedState(
-	definition: PuzzleDefinitionV1,
+	definition: PuzzleDefinition,
 	session: SolveSessionV1
 ): ParseResult<true> {
 	if (
@@ -333,7 +374,12 @@ function validateCombinedState(
 		const rows = Array.from({ length: sudokuSize }, (_, row) =>
 			effectiveValues.slice(row * sudokuSize, (row + 1) * sudokuSize)
 		);
-		if (!isStandardSudokuComplete(rows)) {
+		const germanWhisperLines =
+			definition.version === puzzleDefinitionVersion ? definition.constraints.germanWhispers : [];
+		if (
+			!isStandardSudokuComplete(rows) ||
+			!areGermanWhispersComplete(effectiveValues, germanWhisperLines)
+		) {
 			return failure('invalid-data', 'Completed data does not contain a completed Sudoku.');
 		}
 	}
@@ -348,7 +394,11 @@ function setCandidateFlags(flags: boolean[], digits: readonly number[]) {
 	}
 }
 
-function recalculateCandidates(cells: readonly Cell[]) {
+function recalculateCandidates(
+	cells: readonly Cell[],
+	germanWhisperLines: readonly GermanWhisperLine[]
+) {
+	const germanWhisperCells = getGermanWhisperCellIndexes(germanWhisperLines);
 	for (const cell of cells) {
 		const peers = cells.filter(
 			(peer) =>
@@ -356,14 +406,16 @@ function recalculateCandidates(cells: readonly Cell[]) {
 				peer.colNumber0based === cell.colNumber0based ||
 				peer.boxNumber === cell.boxNumber
 		);
-		cell.candidates = candidateDigits.map((digit) =>
-			peers.every((peer) => peer.fillNumber !== digit)
+		cell.candidates = candidateDigits.map(
+			(digit) =>
+				!(digit === 5 && germanWhisperCells.has(getCellIndex(cell))) &&
+				peers.every((peer) => peer.fillNumber !== digit)
 		);
 	}
 }
 
 function restorePuzzleState(
-	definition: PuzzleDefinitionV1,
+	definition: PuzzleDefinition,
 	session: SolveSessionV1
 ): ParseResult<RestoredPuzzleState> {
 	const combinedValidation = validateCombinedState(definition, session);
@@ -382,11 +434,16 @@ function restorePuzzleState(
 		setCandidateFlags(cell.crossedOutCandidates, annotation.crossedOut);
 		setCandidateFlags(cell.boldCandidates, annotation.bold);
 	}
+	const germanWhisperLines =
+		definition.version === puzzleDefinitionVersion
+			? definition.constraints.germanWhispers.map((line) => [...line])
+			: [];
 	// Calculated candidates are derived from effective values and are deliberately not serialized.
-	recalculateCandidates(cells);
+	recalculateCandidates(cells, germanWhisperLines);
 
 	return success({
 		gridState,
+		germanWhisperLines,
 		puzzlePhase: session.phase,
 		elapsedMilliseconds: session.elapsedMilliseconds
 	});

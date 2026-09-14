@@ -3,7 +3,7 @@ import {
 	deserializePuzzleDefinition,
 	parsePuzzleDefinition,
 	serializePuzzleDefinition,
-	type PuzzleDefinitionV1,
+	type PuzzleDefinition,
 	type RestoredPuzzleState
 } from './puzzleSerialization';
 
@@ -101,7 +101,7 @@ function decompressDefinition(compressed: Uint8Array): ShareResult<string> {
 	}
 }
 
-function encodeSharePayload(definition: PuzzleDefinitionV1): ShareResult<string> {
+function encodeSharePayload(definition: PuzzleDefinition): ShareResult<string> {
 	const puzzleDefinition = serializePuzzleDefinition(definition);
 	if (!parsePuzzleDefinition(puzzleDefinition).ok) {
 		return failure('invalid-data', 'This puzzle contains data that cannot be shared.');
@@ -123,7 +123,7 @@ function encodeSharePayload(definition: PuzzleDefinitionV1): ShareResult<string>
 
 export function createShareUrl(
 	currentUrl: string,
-	definition: PuzzleDefinitionV1
+	definition: PuzzleDefinition
 ): ShareResult<string> {
 	const payload = encodeSharePayload(definition);
 	if (!payload.ok) return payload;
